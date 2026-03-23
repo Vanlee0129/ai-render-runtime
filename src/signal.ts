@@ -386,3 +386,75 @@ export class ComputedSignal<T> {
  * 导出类型
  */
 export type { Subscriber, Effect };
+
+export type WatchOptions = {
+  immediate?: boolean;  // Run callback immediately on creation
+  flush?: 'pre' | 'post' | 'sync';  // When to run callback
+  onCleanup?: (fn: () => void) => void;  // Cleanup callback
+};
+
+export type WatchStopHandle = () => void;
+
+/**
+ * createWatch - Enhanced watch with options (Vue 3 style)
+ */
+export function createWatch<T>(
+  source: () => T,
+  callback: (newValue: T, oldValue: T | undefined) => void,
+  options: WatchOptions = {}
+): WatchStopHandle {
+  let oldValue: T | undefined;
+  let hasRun = false;
+  let cleanup: (() => void) | undefined;
+
+  const fn = () => {
+    const newValue = source();
+
+    if (hasRun) {
+      const prev = oldValue;
+      oldValue = newValue;
+      callback(newValue, prev);
+    } else {
+      oldValue = newValue;
+      hasRun = true;
+
+      if (options.immediate) {
+        callback(newValue, undefined as T);
+      }
+    }
+  };
+
+  // Create effect to track source
+  const stopEffect = createEffect(fn);
+
+  const stop = () => {
+    if (cleanup) {
+      cleanup();
+      cleanup = undefined;
+    }
+    stopEffect();
+  };
+
+  if (options.onCleanup) {
+    options.onCleanup(() => {
+      if (cleanup) {
+        cleanup();
+        cleanup = undefined;
+      }
+      stopEffect();
+    });
+  }
+
+  return stop;
+}
+
+/**
+ * watch - Shorthand for createWatch
+ */
+export function watch<T>(
+  source: () => T,
+  callback: (newValue: T, oldValue: T | undefined) => void,
+  options?: WatchOptions
+): WatchStopHandle {
+  return createWatch(source, callback, options);
+}

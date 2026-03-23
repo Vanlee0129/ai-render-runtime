@@ -4,7 +4,7 @@
  */
 
 // 导入依赖
-import { Signal, createSignal, createArraySignal, createEffect, batch, track } from './signal';
+import { Signal, createSignal, createArraySignal, createEffect, batch, track, createWatch, watch, WatchOptions, WatchStopHandle } from './signal';
 import { h, t, Fragment, createComponent, Component, ComponentProps } from './vdom';
 import { diff, batchDiff, reconcile, Patch, PatchType } from './diff';
 import { jsx, createElement, Fragment as JsxFragment } from './jsx';
@@ -124,7 +124,7 @@ export class AIGenRender {
 }
 
 // 导出供外部使用
-export { Signal, createSignal, createArraySignal, createEffect, batch, track };
+export { Signal, createSignal, createArraySignal, createEffect, batch, track, createWatch, watch, WatchOptions, WatchStopHandle };
 export { h, t, Fragment, createComponent, jsx, createElement };
 export { diff, batchDiff, reconcile, Patch, PatchType };
 export { registry, ComponentSpec, RenderFn };
@@ -139,7 +139,7 @@ export { ref, useRef, forwardRef, Ref, RefCallback } from './refs';
 export { onMounted, onUpdated, onUnmounted, onBeforeMount, onBeforeUpdate, onBeforeUnmount } from './lifecycle';
 export { KeepAlive, getKeepAliveCache, clearKeepAliveCache } from './keep-alive';
 export { defineAsyncComponent, markAsyncComponent, isAsyncComponent, getSuspenseState } from './suspense';
-export { reactive, ref as reactiveRef, computed, watch, watchEffect, isRef } from './reactive';
+export { reactive, ref as reactiveRef, computed, watchEffect, isRef } from './reactive';
 export type { Component, ComponentProps };
 
 // 便捷函数
