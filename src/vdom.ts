@@ -5,6 +5,29 @@
 
 import { createSignal } from './signal';
 import { Ref, RefCallback } from './refs';
+import { getCachedVNode, clearVNodeCache } from './vnode-cache';
+
+let isStaticHoistingEnabled = false;
+
+export function enableStaticHoisting(): void {
+  isStaticHoistingEnabled = true;
+}
+
+export function disableStaticHoisting(): void {
+  isStaticHoistingEnabled = false;
+  clearVNodeCache();
+}
+
+function isStaticElement(tag: string, props: VNodeProps): boolean {
+  // Don't cache if props contain functions (handlers) or refs
+  for (const key in props) {
+    if (key.startsWith('on') && typeof props[key] === 'function') return false;
+    if (key === 'ref') return false;
+    if (key === 'key') continue;
+    if (typeof props[key] === 'function') return false;
+  }
+  return true;
+}
 
 /**
  * 虚拟节点类型
@@ -93,6 +116,12 @@ export function h(
   ...children: (VNode | string)[]
 ): VNode {
   const { key, patchFlag, ...rest } = props as VNodeProps & { patchFlag?: PatchFlags; key?: string | number };
+
+  // Check if this is a static element suitable for caching
+  if (isStaticHoistingEnabled && isStaticElement(tag, rest)) {
+    return getCachedVNode(tag, rest, children.flat());
+  }
+
   return {
     type: tag,
     props: rest,
