@@ -34,22 +34,43 @@ export function componentDidCatch<
   };
 }
 
+// ErrorBoundary state storage - keyed by component identity
+// In a full implementation, this would be managed by the renderer
+const errorBoundaryStateMap = new WeakMap<object, ErrorBoundaryState>();
+
 /**
  * ErrorBoundary - Component that catches child errors
+ *
+ * NOTE: This functional component implementation has a limitation - the error state
+ * is stored externally and keyed by component identity. For proper React-style
+ * state management, this would need hooks (useState) or class-based component.
+ *
+ * To use multiple independent ErrorBoundaries, ensure each uses a unique
+ * component function or use the class-based pattern.
  */
 export function ErrorBoundary(props: {
   fallback: (error: Error, errorInfo: ErrorInfo) => VNode | null;
   children?: VNode | VNode[];
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }): VNode | null {
-  let state: ErrorBoundaryState = {
-    hasError: false,
-    error: null,
-    errorInfo: null
-  };
+  // Use the ErrorBoundary function reference as the key for state storage
+  // This is a simplification - React uses the fiber tree for proper identity
+  const componentKey: object = ErrorBoundary;
+
+  let state = errorBoundaryStateMap.get(componentKey);
+  if (!state) {
+    state = {
+      hasError: false,
+      error: null,
+      errorInfo: null
+    };
+    errorBoundaryStateMap.set(componentKey, state);
+  }
 
   const handleError = (error: Error, errorInfo: ErrorInfo): VNode | null => {
-    state = { hasError: true, error, errorInfo };
+    state!.hasError = true;
+    state!.error = error;
+    state!.errorInfo = errorInfo;
     props.onError?.(error, errorInfo);
     return props.fallback(error, errorInfo);
   };
@@ -67,4 +88,11 @@ export function ErrorBoundary(props: {
   } catch (error) {
     return handleError(error as Error, { componentStack: new Error().stack });
   }
+}
+
+/**
+ * Reset ErrorBoundary state - useful for testing
+ */
+export function resetErrorBoundary(): void {
+  errorBoundaryStateMap.delete(ErrorBoundary);
 }
