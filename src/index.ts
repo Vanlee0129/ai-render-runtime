@@ -129,6 +129,7 @@ export { AIProvider, callAI, parseAIResponse } from './ai-adapter';
 export { Renderer, createRenderer, mount };
 export { scheduleCallback, runWithPriority, getCurrentPriority, Priority, ImmediatePriority, UserBlockingPriority, NormalPriority, LowPriority, IdlePriority };
 export { memo, useMemo, useCallback, isMemoized } from './memo';
+export { createContext, useContext, pushContext, popContext, Context } from './context';
 export type { Component, ComponentProps };
 
 // 便捷函数
