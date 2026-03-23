@@ -4,19 +4,78 @@
 
 [English](./README.en.md) | [中文](./README.md)
 
+## Table of Contents
+
+- [Core Value](#core-value)
+- [Why AI Render](#why-ai-render)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [AI Native Features](#ai-native-features)
+- [API Reference](#api-reference)
+- [Core Concepts](#core-concepts)
+
+---
+
 ## Core Value
 
 **AI Native** - Not another React, but a rendering engine designed specifically for AI:
 
-- Input: AI-generated JSON / structured data
-- Output: High-performance UI components
-- Built-in AI adapters for major LLM providers
-- **Streaming**: Real-time display of AI generation progress
-- **Intent Routing**: AI UI interactions automatically trigger AI understanding
+```
+AI outputs JSON → AIRender.render() → High-performance UI
+```
+
+### Difference from React/Vue
+
+| Feature | React/Vue | AI Render |
+|---------|-----------|-----------|
+| Core Input | JSX/Template | AI JSON Spec |
+| State Source | Developer-defined | AI dynamically generated |
+| Update Method | Manual setState | AI output auto-renders |
+| Hot Update | Manual handling | Built-in `air.update()` |
+| AI Integration | External implementation | Built-in adapters |
+
+---
+
+## Why AI Render
+
+### Traditional AI + Frontend Workflow
+
+```
+1. AI returns JSON (or text description)
+2. Developer manually converts to component code
+3. Write components, bind data
+4. Test and verify
+5. Deploy
+```
+
+**Pain Point**: Every AI response requires developer intervention, making true AI-native applications impossible.
+
+### Using AI Render
+
+```
+1. AI returns JSON
+2. AIRender.render() renders directly
+3. User sees result
+```
+
+**Advantages**:
+- Zero manual conversion
+- Real-time AI output rendering
+- Built-in hot updates
+- Streaming generation support
+
+---
 
 ## Quick Start
 
-### Method 1: AI-Driven (Core Use Case)
+### Install
+
+```bash
+npm install
+npm run build
+```
+
+### Method 1: AI-Driven Rendering (Core Use Case)
 
 ```javascript
 import { AIRender } from 'ai-render-runtime';
@@ -67,18 +126,18 @@ for await (const state of stream.generate('Create a login form')) {
 ### Method 3: Intent Routing
 
 ```javascript
-import { createIntentRouter, createAIStream } from 'ai-render-runtime';
+import { createIntentRouter } from 'ai-render-runtime';
 
 const router = createIntentRouter();
 
 // Register interaction handler
 router.register('onSubmit', async (data) => {
   // AI understands submitted data
-  return await ai.understand('User submitted login form', data);
+  return await ai.understand('form_submit', data);
 });
 
 router.register('onClick', async (buttonId) => {
-  return await ai.understand(`User clicked ${buttonId} button`);
+  return await ai.understand('click', { id: buttonId });
 });
 
 // Bind to AI-generated UI
@@ -87,7 +146,219 @@ button.addEventListener('click', () => {
 });
 ```
 
-## AI-Native Features
+---
+
+## Architecture
+
+### Overall Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      AI Render Runtime                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────┐ │
+│  │ AI Adapter  │───▶│   Parser    │───▶│  AIRender       │ │
+│  └─────────────┘    └─────────────┘    │                 │ │
+│                                          │  ┌───────────┐ │ │
+│  ┌─────────────┐    ┌─────────────┐      │  │ Registry  │ │ │
+│  │ AIStream   │───▶│ Spec JSON  │──────▶│  └─────┬─────┘ │ │
+│  └─────────────┘    └─────────────┘      │        │       │ │
+│                                          │        ▼       │ │
+│  ┌─────────────┐    ┌─────────────┐      │  ┌─────────┐  │ │
+│  │IntentRouter│◀───│  Events    │◀─────│  │Renderer │  │ │
+│  └─────────────┘    └─────────────┘      │  └───┬─────┘  │ │
+│                                          │      │         │ │
+│                                          └──────┼─────────┘ │
+│                                                 │          │
+│  ┌─────────────────────────────────────────────┼──────────┤
+│  │                  Core Engine                │          │
+│  ├─────────────────────────────────────────────┼──────────┤
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐    │          │
+│  │  │ Signal  │  │  VDOM   │  │  Diff   │    │          │
+│  │  │(Reactive│  │(Virtual)│  │(O(n))   │    │          │
+│  │  └─────────┘  └─────────┘  └─────────┘    │          │
+│  │                                              │          │
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐    │          │
+│  │  │Lifecycle│  │ Context │  │  Memo  │    │          │
+│  │  │         │  │         │  │        │    │          │
+│  │  └─────────┘  └─────────┘  └─────────┘    │          │
+│  └─────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Core Modules
+
+#### 1. AI Adapter Layer
+
+```
+┌─────────────────────────────────────────┐
+│            AI Adapter                    │
+├─────────────────────────────────────────┤
+│                                         │
+│  callAI(provider, config, prompt)      │
+│       │                                 │
+│       ├──▶ MiniMax Adapter             │
+│       ├──▶ OpenAI Adapter              │
+│       └──▶ Anthropic Adapter            │
+│                                         │
+│  parseAIResponse(content)              │
+│       │                                 │
+│       └──▶ JSON Extractor              │
+│              - Markdown code block      │
+│              - Brace range extraction   │
+│              - Fault-tolerant parsing   │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+#### 2. Registry (Component Registry)
+
+```
+┌─────────────────────────────────────────┐
+│         ComponentRegistry               │
+├─────────────────────────────────────────┤
+│                                         │
+│  register(type, renderFn)              │
+│       │                                 │
+│       ├──▶ 'card'     → CardRenderer  │
+│       ├──▶ 'form'     → FormRenderer  │
+│       ├──▶ 'input'    → InputRenderer │
+│       ├──▶ 'button'   → ButtonRenderer│
+│       ├──▶ 'list'     → ListRenderer  │
+│       ├──▶ 'alert'    → AlertRenderer │
+│       ├──▶ 'stats'    → StatsRenderer │
+│       ├──▶ 'profile'  → ProfileRender│
+│       └──▶ 'buttonGroup' → ...        │
+│                                         │
+│  render(spec) → VNode                 │
+│       │                                 │
+│       └──▶ Recursive child rendering   │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+#### 3. Renderer
+
+```
+┌─────────────────────────────────────────┐
+│              Renderer                    │
+├─────────────────────────────────────────┤
+│                                         │
+│  createDom(vnode) → DOM                │
+│       │                                 │
+│       ├──▶ Text Node                   │
+│       ├──▶ Element                     │
+│       ├──▶ Component ──▶ createDom()   │
+│       └──▶ Fragment                   │
+│                                         │
+│  patch(parent, newVNode, oldVNode)    │
+│       │                                 │
+│       ├──▶ updateProps                │
+│       ├──▶ updateChildren             │
+│       │     ├──▶ diffChildrenKeyed()  │
+│       │     └──▶ diffChildren()       │
+│       └──▶ applyPatches()             │
+│                                         │
+│  hydrate(dom, vnode)                  │
+│       │                                 │
+│       └──▶ SSR DOM reuse              │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+#### 4. Signal (Reactivity)
+
+```
+┌─────────────────────────────────────────┐
+│            Signal (Reactive)            │
+├─────────────────────────────────────────┤
+│                                         │
+│  createSignal(initial)                 │
+│       │                                 │
+│       └──▶ [getter, setter]            │
+│                                         │
+│  Signal.get()                          │
+│       │                                 │
+│       └──▶ Collect current subscriber  │
+│                                         │
+│  Signal.set(newValue)                  │
+│       │                                 │
+│       └──▶ Notify all subscribers      │
+│             └──▶ batch() updates       │
+│                                         │
+│  createEffect(fn)                      │
+│       │                                 │
+│       └──▶ Auto-tracks dependencies   │
+│             └──▶ WeakMap prevents leaks │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+#### 5. Diff Algorithm
+
+```
+┌─────────────────────────────────────────┐
+│         O(n) Keyed Diff                │
+├─────────────────────────────────────────┤
+│                                         │
+│  diffChildrenKeyed(new, old)           │
+│       │                                 │
+│       ├──▶ Build Map by key           │
+│       │     ├──▶ newKeyed: Map        │
+│       │     └──▶ oldKeyed: Map        │
+│       │                                 │
+│       ├──▶ First pass: sequential scan │
+│       │     ├──▶ New → INSERT        │
+│       │     ├──▶ Match → recursive    │
+│       │     └──▶ Out-of-order → MOVE  │
+│       │                                 │
+│       └──▶ Second pass: deletion check │
+│             └──▶ Remaining old → REMOVE│
+│                                         │
+│  PatchType: REPLACE | REMOVE | INSERT │
+│              UPDATE | MOVE | TEXT       │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+#### 6. VNode Structure
+
+```
+┌─────────────────────────────────────────┐
+│              VNode                       │
+├─────────────────────────────────────────┤
+│                                         │
+│  interface VNode {                     │
+│    type: string | Component           │
+│    props: VNodeProps                   │
+│    children: (VNode | string)[]         │
+│    key?: string | number                │
+│    flags: VNodeFlags                   │
+│    patchFlag?: PatchFlags  // Optimized│
+│  }                                     │
+│                                         │
+│  enum VNodeFlags {                    │
+│    Element = 1,                        │
+│    Text = 2,                           │
+│    Component = 4,                      │
+│    Fragment = 8                        │
+│  }                                     │
+│                                         │
+│  enum PatchFlags {                    │
+│    TEXT = 1,    // Text only           │
+│    CLASS = 2,   // Class only         │
+│    STYLE = 4,   // Style only         │
+│    PROPS = 8,   // Other props        │
+│    FULL = 16    // Full diff          │
+│  }                                     │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## AI Native Features
 
 ### 1. Spec-Driven Rendering
 
@@ -97,11 +368,27 @@ AI returns standardized JSON, automatically mapped to components:
 {
   "type": "form",
   "children": [
-    { "type": "input", "placeholder": "Username" },
-    { "type": "input", "type": "password", "placeholder": "Password" },
-    { "type": "button", "label": "Login" }
+    { "type": "input", "label": "Username", "placeholder": "Enter username" },
+    { "type": "input", "type": "password", "label": "Password" },
+    { "type": "button", "label": "Login", "variant": "primary" }
   ]
 }
+```
+
+Rendered:
+
+```
+┌─────────────────────────────────┐
+│  ┌───────────────────────────┐  │
+│  │ Username                  │  │
+│  │ [________________]        │  │
+│  └───────────────────────────┘  │
+│  ┌───────────────────────────┐  │
+│  │ Password                  │  │
+│  │ [________________]        │  │
+│  └───────────────────────────┘  │
+│        [Login]                   │
+└─────────────────────────────────┘
 ```
 
 ### 2. Streaming Render
@@ -110,12 +397,28 @@ Real-time display of AI generation progress:
 
 ```javascript
 const stream = createAIStream(config);
+
+// State
+interface AIStreamState {
+  isGenerating: boolean;
+  progress: number;       // 0-100
+  currentSpec: Spec;
+  history: Spec[];
+  error: string | null;
+}
+
+// Listen
 stream.onUpdate(state => {
-  updateProgress(state.progress);
+  progressBar.value = state.progress;
   if (state.currentSpec) {
-    renderIncremental(state.currentSpec);
+    render(state.currentSpec); // Incremental render
   }
 });
+
+// Generate
+for await (const state of stream.generate('Create a dashboard')) {
+  // See AI generating UI in real-time
+}
 ```
 
 ### 3. Intent Routing
@@ -124,107 +427,316 @@ AI UI interactions automatically trigger AI understanding:
 
 ```javascript
 const router = createIntentRouter();
+
+// Register Intent handler
 router.register('onSubmit', async (data) => {
-  return await ai.understand('Form submitted', data);
+  return await ai.understand('form_submit', data);
 });
+
+router.register('onClick', async ({ id, action }) => {
+  return await ai.understand('click', { id, action });
+});
+
+// Use
+const spec = await ai.generate('Create a page with form');
+render(spec);
+
+// After, AI-generated UI automatically connects to router
+document.querySelector('button').onclick = () => {
+  router.handle('onClick', { id: 'submit-btn', action: 'login' });
+};
 ```
 
-### 4. AI State Management
+### 4. Hot Update
 
 ```javascript
-const stream = createAIStream(config);
+const app = new AIRender({ container: '#app', initialSpec });
 
-// Get current state
-stream.getState();    // { isGenerating, progress, currentSpec, history, error }
+// Full update
+app.update(newSpecs);
 
-// Get history
-stream.getHistory();   // All generated UI history
-
-// Clear history
-stream.clearHistory();
+// Or get current Spec and modify
+const current = app.getSpec();
+app.update(modifiedSpec);
 ```
 
-### 5. Built-in Component Registry
+### 5. Custom Components
 
-| Component | Description |
-|-----------|-------------|
-| `card` | Card container |
-| `form` | Form container |
-| `input` | Input field |
-| `button` | Button |
-| `list` | List |
-| `alert` | Alert box |
-| `stats` | Statistics card |
-| `profile` | User profile card |
+```javascript
+// Register custom component
+app.register('myComponent', (spec, render) => {
+  return h('div', { class: 'my-component' },
+    h('span', null, spec.text),
+    ...spec.children.map(c => render(c))
+  );
+});
 
-## Why AI Render?
-
-Traditional approach:
-```
-AI returns JSON → Manually write components → Bind data → Test
-```
-
-With AI Render:
-```
-AI returns JSON → AIRender.render() → Done
+// AI can now use this component
+const spec = {
+  type: 'myComponent',
+  text: 'Hello',
+  children: [...]
+};
 ```
 
-With Streaming AI Render:
-```
-AI streams output → Real-time incremental render → User sees generation process
-```
+---
 
-## API Overview
+## API Reference
 
 ### AI Native Core
 
+#### AIRender
+
 ```typescript
-// Render AI output directly
-new AIRender({ container, initialSpec })
-air.update(specs)
+// Create instance
+const app = new AIRender({
+  container: '#app',
+  initialSpec: specs  // optional
+});
 
-// Streaming generation
-createAIStream(config)
-stream.generate(prompt)  // AsyncGenerator
-stream.onUpdate(callback)
-stream.getState()
-stream.getHistory()
+// Render Spec
+app.render(specs);
+app.update(specs);  // Hot update
 
-// Intent routing
-createIntentRouter()
-router.register(intent, handler)
-router.handle(intent, payload)
+// Register custom component
+app.register('myComponent', (spec, render) => VNode);
 
-// AI generation
-createAIGen(options)
-gen.generate(prompt)
-generate(prompt, container, apiKey)  // Convenience function
+// Get current Spec
+app.getSpec();
+
+// Destroy
+app.destroy();
+```
+
+#### createAIGen
+
+```typescript
+// Create AI generator
+const gen = createAIGen({
+  container: '#app',
+  apiKey: 'your-key',
+  provider: 'minimax',  // or 'openai'
+  model: 'M2-her'
+});
+
+// Generate
+await gen.generate('Create a login form');
+```
+
+#### createAIStream
+
+```typescript
+// Create streaming generator
+const stream = createAIStream({
+  apiKey: 'your-key',
+  apiUrl: '...',
+  model: '...'
+});
+
+// Listen to state
+stream.onUpdate(state => {
+  console.log(state.progress, state.currentSpec);
+});
+
+// Streaming generate
+for await (const state of stream.generate('Create dashboard')) {
+  render(state.currentSpec);
+}
+
+// Non-streaming
+const spec = await stream.generateOnce('Create form');
+
+// State management
+stream.getState();       // Current state
+stream.getHistory();     // History
+stream.clearHistory();   // Clear
+```
+
+#### IntentRouter
+
+```typescript
+const router = createIntentRouter();
+
+// Register
+router.register('onSubmit', async (data) => {
+  return await ai.understand('submit', data);
+});
+
+// Handle
+const result = await router.handle('onSubmit', formData);
+
+// Query
+router.getIntents();  // ['onSubmit', ...]
+```
+
+#### registry
+
+```typescript
+// Render directly
+const vnode = registry.render(spec);
+
+// Register component
+registry.register('myComponent', (spec, render) => VNode);
+
+// Get
+const renderer = registry.get('button');
 ```
 
 ### Reactivity
 
+#### createSignal
+
 ```typescript
-createSignal(initial)      // Signal
-reactive(obj)              // Reactive object
-computed(fn)               // Computed value
-watch(fn, callback)       // Watch
+const [count, setCount] = createSignal(0);
+count();        // Read
+setCount(1);    // Write
+setCount(c => c + 1);  // Update
+```
+
+#### reactive
+
+```typescript
+const state = reactive({
+  name: 'AI',
+  items: []
+});
+
+state.name;           // Auto-tracked
+state.items.push(1);  // Deep reactive
+```
+
+#### computed
+
+```typescript
+const doubled = computed(() => count() * 2);
+```
+
+#### watch / watchEffect
+
+```typescript
+watch(() => count(), (newVal, oldVal) => {
+  console.log(`${oldVal} → ${newVal}`);
+});
+
+watchEffect(() => {
+  console.log('Count changed:', count());
+});
 ```
 
 ### Components
 
+#### memo / useMemo / useCallback
+
 ```typescript
-memo(Component)            // Memoize
-useMemo(fn, deps)          // Value memoization
-useRef(initial?)          // DOM reference
+const Memoized = memo(Component, (prev, next) => {
+  return prev.id === next.id;  // Custom comparison
+});
+
+const value = useMemo(() => expensive(), [dep]);
+const fn = useCallback(() => doSomething(a), [a]);
+```
+
+#### ref / useRef
+
+```typescript
+const ref = useRef<HTMLInputElement>();
+ref.current.focus();
+```
+
+#### forwardRef
+
+```typescript
+const ForwardedInput = forwardRef((props, ref) => {
+  return h('input', { ref });
+});
 ```
 
 ### Lifecycle
 
 ```typescript
-onMounted(fn)             // After mount
-onUpdated(fn)             // After update
-onUnmounted(fn)           // After unmount
+onMounted(() => { /* DOM mounted */ });
+onUpdated(() => { /* DOM updated */ });
+onUnmounted(() => { /* DOM will unmount */ });
+onBeforeMount(() => { /* Before mount */ });
+onBeforeUpdate(() => { /* Before update */ });
+onBeforeUnmount(() => { /* Before unmount */ });
 ```
+
+### Context
+
+```typescript
+const ThemeContext = createContext('light');
+
+function ThemedButton() {
+  const theme = useContext(ThemeContext);
+  return h('button', { class: theme }, 'Click');
+}
+
+// Provide
+provide(ThemeContext, 'dark');
+
+// Inject
+const theme = inject(ThemeContext);
+```
+
+---
+
+## Core Concepts
+
+### Spec
+
+AI-generated standardized UI description:
+
+```typescript
+interface Spec {
+  type: string;           // Component type
+  [key: string]: any;    // Component properties
+}
+```
+
+### VNode
+
+Virtual node, pure data structure describing UI:
+
+```typescript
+interface VNode {
+  type: string | Component;
+  props: Record<string, any>;
+  children: (VNode | string)[];
+  key?: string | number;
+  flags: VNodeFlags;
+}
+```
+
+### Signal
+
+Reactive data container, notifies subscribers on value change:
+
+```typescript
+const [value, setValue] = createSignal(initial);
+// or
+const signal = new Signal(initial);
+signal.get();   // Read
+signal.set(1); // Write
+```
+
+### Registry
+
+Component registry, maps Spec type to render function:
+
+```typescript
+registry.register('card', (spec, render) => {
+  return h('div', { class: 'card' },
+    spec.children?.map(c => render(c))
+  );
+});
+```
+
+---
+
+## Browser Support
+
+Modern browsers (ES2020+)
 
 ## Install
 
@@ -232,10 +744,6 @@ onUnmounted(fn)           // After unmount
 npm install
 npm run build
 ```
-
-## Browser Support
-
-Modern browsers (ES2020+)
 
 ## License
 
