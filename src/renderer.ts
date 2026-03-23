@@ -8,6 +8,51 @@ import { Signal, batch, createSignal } from './signal';
 import { scheduleCallback, NormalPriority } from './scheduler';
 import { diff, batchDiff, reconcile, Patch, PatchType, diffChildrenKeyed } from './diff';
 
+// Event delegation system
+type EventHandler = (e: Event) => void;
+const delegatedEvents = new Map<string, Set<EventHandler>>();
+let rootElement: Element | null = null;
+
+export function setRootElement(el: Element): void {
+  rootElement = el;
+  if (rootElement) {
+    rootElement.addEventListener('click', handleDelegatedEvent);
+    rootElement.addEventListener('input', handleDelegatedEvent);
+    rootElement.addEventListener('change', handleDelegatedEvent);
+    rootElement.addEventListener('submit', handleDelegatedEvent);
+    rootElement.addEventListener('focus', handleDelegatedEvent);
+    rootElement.addEventListener('blur', handleDelegatedEvent);
+    rootElement.addEventListener('keydown', handleDelegatedEvent);
+    rootElement.addEventListener('keyup', handleDelegatedEvent);
+    rootElement.addEventListener('mouseenter', handleDelegatedEvent);
+    rootElement.addEventListener('mouseleave', handleDelegatedEvent);
+  }
+}
+
+function handleDelegatedEvent(e: Event): void {
+  const target = e.target as Element;
+  // Walk up the tree to find element with event handler
+  let current: Element | null = target;
+  while (current && current !== rootElement) {
+    const handlers = current._eventHandlers as Map<string, EventHandler> | undefined;
+    if (handlers) {
+      const handler = handlers.get(e.type);
+      if (handler) {
+        e.preventDefault();
+        handler.call(current, e);
+        return;
+      }
+    }
+    current = current.parentElement;
+  }
+}
+
+declare global {
+  interface Element {
+    _eventHandlers?: Map<string, EventHandler>;
+  }
+}
+
 export interface RenderOptions {
   container: Element;
   sync?: boolean;        // 同步渲染
@@ -39,6 +84,7 @@ export class Renderer {
       dom: null,
       signals: new Map()
     };
+    setRootElement(container);
   }
   
   /**
@@ -147,16 +193,26 @@ export class Renderer {
   private createComponentDom(vnode: VNode): Element | Comment {
     const Component = vnode.type as Component;
     const props = vnode.props || {};
-    
+
     try {
       const result = Component(props);
       if (result === null) {
         return document.createComment('Empty Component');
       }
-      
+
       const dom = this.createDom(result);
-      // 标记组件根节点
       (dom as any)._component = vnode;
+
+      // Transfer event handlers from vnode to actual DOM
+      if (vnode.props && (dom as Element)._eventHandlers) {
+        for (const key in vnode.props) {
+          if (key.startsWith('on') && typeof vnode.props[key] === 'function') {
+            const eventName = key.slice(2).toLowerCase();
+            (dom as Element)._eventHandlers!.set(eventName, vnode.props[key]);
+          }
+        }
+      }
+
       return dom;
     } catch (e) {
       console.error('Component render error:', e);
@@ -169,38 +225,49 @@ export class Renderer {
    */
   private setProps(dom: Element, props: VNodeProps): void {
     if (!props) return;
-    
+
+    // Initialize event handlers map
+    if (!dom._eventHandlers) {
+      dom._eventHandlers = new Map();
+    }
+
     for (const key in props) {
       if (key === 'children' || key === 'key') continue;
-      
+
       const value = props[key];
-      
-      // 事件处理
+
+      // Event handling via delegation - store in map, don't add listener directly
       if (key.startsWith('on') && typeof value === 'function') {
         const eventName = key.slice(2).toLowerCase();
-        dom.addEventListener(eventName, value as EventListener);
+        dom._eventHandlers!.set(eventName, value as EventHandler);
         continue;
       }
-      
-      // ref
-      if (key === 'ref' && typeof value === 'function') {
-        value(dom);
-        continue;
-      }
-      
+
       // className -> class
       if (key === 'className') {
         dom.setAttribute('class', value);
         continue;
       }
-      
+
       // style
       if (key === 'style' && typeof value === 'object') {
         Object.assign((dom as HTMLElement).style, value);
         continue;
       }
-      
-      // 普通属性
+
+      // ref
+      if (key === 'ref' && typeof value === 'function') {
+        value(dom);
+        continue;
+      }
+
+      // class (direct)
+      if (key === 'class') {
+        dom.setAttribute('class', value);
+        continue;
+      }
+
+      // Regular attributes
       if (value === null || value === undefined) {
         dom.removeAttribute(key);
       } else {
@@ -283,10 +350,7 @@ export class Renderer {
       // 事件
       if (key.startsWith('on') && typeof newValue === 'function') {
         const eventName = key.slice(2).toLowerCase();
-        if (oldValue !== newValue) {
-          dom.removeEventListener(eventName, oldValue as EventListener);
-          dom.addEventListener(eventName, newValue as EventListener);
-        }
+        dom._eventHandlers?.set(eventName, newValue as EventHandler);
         return;
       }
       
