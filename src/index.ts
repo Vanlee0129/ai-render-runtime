@@ -14,6 +14,11 @@ import { SYSTEM_PROMPT, AIConfig, AIResponse } from './prompts';
 import { AIProvider, callAI, parseAIResponse } from './ai-adapter';
 import { scheduleCallback, runWithPriority, getCurrentPriority, Priority, ImmediatePriority, UserBlockingPriority, NormalPriority, LowPriority, IdlePriority } from './scheduler';
 import { StateStore } from './state-store';
+import { IntentEngine, Intent, IntentContext } from './intent-engine';
+import { ActionEngine } from './action-engine';
+import { RenderOrchestrator } from './render-orchestrator';
+import { PlatformAdapter, createPlatformAdapter } from './platform-adapter';
+import { Spec, ActionSpec } from './spec-contract';
 
 // AI 驱动的渲染选项
 export interface AIGenOptions {
@@ -30,8 +35,12 @@ export interface AIGenOptions {
 export class AIRender {
   renderer: Renderer;
   container: Element;
-  currentSpec: any[] = [];
+  currentSpec: Spec | null = null;
   stateStore: StateStore;
+  intentEngine: IntentEngine;
+  actionEngine: ActionEngine;
+  orchestrator: RenderOrchestrator;
+  adapter: PlatformAdapter;
 
   constructor(options: { container: Element | string; initialSpec?: any | any[]; enableHistory?: boolean }) {
     this.container = typeof options.container === 'string'
@@ -40,10 +49,40 @@ export class AIRender {
 
     this.renderer = new Renderer(this.container);
     this.stateStore = new StateStore();
+    this.intentEngine = new IntentEngine();
+    this.actionEngine = new ActionEngine();
+    this.orchestrator = new RenderOrchestrator(this.renderer);
+    this.adapter = createPlatformAdapter(this.container);
 
     if (options.initialSpec) {
       this.render(options.initialSpec);
     }
+  }
+
+  async processIntent(intent: Intent): Promise<Spec | null> {
+    const context: IntentContext = {
+      state: this.currentSpec?.state || {},
+      history: [],
+    };
+    const result = await this.intentEngine.process(intent, context);
+    if (result.spec) {
+      this.render(result.spec);
+      return result.spec;
+    }
+    return null;
+  }
+
+  async executeAction(action: ActionSpec): Promise<boolean> {
+    const result = await this.actionEngine.execute(action);
+    if (result.success && result.nextIntent) {
+      const intent: Intent = {
+        type: result.nextIntent,
+        confidence: 1.0,
+        entities: { previousAction: action },
+      };
+      await this.processIntent(intent);
+    }
+    return result.success;
   }
 
   saveSnapshot(label?: string): string {
@@ -78,9 +117,8 @@ export class AIRender {
     return this.stateStore.subscribe(callback);
   }
 
-  render(specs: any | any[]) {
-    const specArray = Array.isArray(specs) ? specs : [specs];
-    this.currentSpec = specArray;
+  render(spec: any) {
+    this.currentSpec = spec;
 
     // Only clear innerHTML if not hydrating and context.dom is not already null
     // This preserves SSR-rendered DOM during hydration
@@ -91,20 +129,15 @@ export class AIRender {
       (this.renderer as any).context.vnode = null;
     }
 
-    const vnodes: any[] = specArray.map(spec => registry.render(spec));
+    const vnode = registry.render(spec);
 
-    if (vnodes.length === 0) return;
+    if (!vnode) return;
 
-    if (vnodes.length === 1) {
-      this.renderer.render(vnodes[0]);
-    } else {
-      const fragment = h('div', { class: 'gen-root' }, ...vnodes);
-      this.renderer.render(fragment);
-    }
+    this.renderer.render(vnode);
   }
 
-  update(specs: any | any[]) {
-    this.render(specs);
+  update(spec: any) {
+    this.render(spec);
   }
 
   register(name: string, fn: (spec: any, render: (spec: any) => any) => any) {
