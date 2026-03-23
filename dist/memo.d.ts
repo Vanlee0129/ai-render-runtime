@@ -13,6 +13,14 @@ export declare function useMemo<T>(compute: () => T, deps: any[]): T;
  * useCallback - Memoize a callback function
  */
 export declare function useCallback<T extends (...args: any[]) => any>(callback: T, deps: any[]): T;
+/**
+ * Clear memo cache for a render ID (call at render start)
+ */
+export declare function clearMemoCache(renderId: string): void;
+/**
+ * Set render ID for memoization tracking (call by renderer)
+ */
+export declare function setMemoRenderId(id: string | null): void;
 export declare function isMemoized(fn: any): boolean;
 export {};
 //# sourceMappingURL=memo.d.ts.map

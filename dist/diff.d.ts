@@ -38,7 +38,7 @@ export declare function batchDiff(newSpec: any[], oldSpec: any[]): {
 };
 /**
  * Key-based children diff - O(n) algorithm
- * Uses position-based matching for elements with keys
+ * Uses position-based matching with move detection
  */
 export declare function diffChildrenKeyed(newChildren: (VNode | string)[], oldChildren: (VNode | string)[]): Patch[];
 //# sourceMappingURL=diff.d.ts.map

@@ -288,7 +288,7 @@ export function batchDiff(
 
 /**
  * Key-based children diff - O(n) algorithm
- * Uses position-based matching for elements with keys
+ * Uses position-based matching with move detection
  */
 export function diffChildrenKeyed(
   newChildren: (VNode | string)[],
@@ -296,7 +296,7 @@ export function diffChildrenKeyed(
 ): Patch[] {
   const patches: Patch[] = [];
 
-  // Convert to keyed maps
+  // Convert to keyed maps with vnode and position
   const newKeyed = new Map<string | number, { vnode: VNode; index: number }>();
   const oldKeyed = new Map<string | number, { vnode: VNode; index: number }>();
 
@@ -316,63 +316,66 @@ export function diffChildrenKeyed(
     oldKeyed.set(key, { vnode, index: i });
   });
 
-  // Track position mappings
-  const newKeys = Array.from(newKeyed.keys());
-  const oldKeys = Array.from(oldKeyed.keys());
+  // Track which old keys have been matched
+  const matchedOldKeys = new Set<string | number>();
 
-  // Simple approach: walk through and match
-  let oldIndex = 0;
-  let newIndex = 0;
+  // First pass: handle items in order, detecting moves
+  let lastMatchedOldIndex = -1;
 
-  // Process in order, handling inserts and removes
-  while (newIndex < newKeys.length) {
-    const newKey = newKeys[newIndex];
-    const oldKey = oldKeys[oldIndex];
+  for (let newIndex = 0; newIndex < newChildren.length; newIndex++) {
+    const child = newChildren[newIndex];
+    const vnode = typeof child === 'string'
+      ? { type: 'text', props: {}, children: [child], flags: VNodeFlags.Text, key: `text-${newIndex}` } as VNode
+      : child;
+    const key = vnode.key ?? newIndex;
 
-    if (newKey === oldKey) {
-      // Match - diff recursively
-      const newItem = newKeyed.get(newKey)!;
-      const oldItem = oldKeyed.get(oldKey)!;
-      const childPatches = diff(newItem.vnode, oldItem.vnode, null);
-      childPatches.forEach(p => { p.index = newIndex; patches.push(p); });
-      newIndex++;
-      oldIndex++;
-    } else if (oldKeyed.has(newKey)) {
-      // Key exists in old but not at current position - it was moved
-      const oldItem = oldKeyed.get(newKey)!;
-      patches.push({
-        type: PatchType.MOVE,
-        node: null as any,
-        newNode: newKeyed.get(newKey)!.vnode,
-        oldNode: oldItem.vnode,
-        index: newIndex
-      });
-      newIndex++;
-    } else {
-      // New key - insert
+    const oldEntry = oldKeyed.get(key);
+
+    if (!oldEntry) {
+      // New item - insert
       patches.push({
         type: PatchType.INSERT,
         node: null as any,
-        newNode: newKeyed.get(newKey)!.vnode,
+        newNode: vnode,
         index: newIndex
       });
-      newIndex++;
+    } else {
+      matchedOldKeys.add(key);
+
+      if (oldEntry.index > lastMatchedOldIndex) {
+        // Item is in order - diff recursively
+        const childPatches = diff(vnode, oldEntry.vnode, null);
+        childPatches.forEach(p => { p.index = newIndex; patches.push(p); });
+        lastMatchedOldIndex = oldEntry.index;
+      } else {
+        // Item was moved (appeared earlier in old list) - treat as UPDATE/MOVE
+        patches.push({
+          type: PatchType.MOVE,
+          node: null as any,
+          newNode: vnode,
+          oldNode: oldEntry.vnode,
+          index: newIndex
+        });
+      }
     }
   }
 
-  // Remaining old keys are deletions
-  while (oldIndex < oldKeys.length) {
-    const oldKey = oldKeys[oldIndex];
-    if (!newKeyed.has(oldKey)) {
+  // Second pass: remaining old items are deletions
+  oldChildren.forEach((child, oldIndex) => {
+    const vnode = typeof child === 'string'
+      ? { type: 'text', props: {}, children: [child], flags: VNodeFlags.Text, key: `text-${oldIndex}` } as VNode
+      : child;
+    const key = vnode.key ?? oldIndex;
+
+    if (!matchedOldKeys.has(key)) {
       patches.push({
         type: PatchType.REMOVE,
         node: null as any,
-        oldNode: oldKeyed.get(oldKey)!.vnode,
+        oldNode: vnode,
         index: oldIndex
       });
     }
-    oldIndex++;
-  }
+  });
 
   return patches;
 }

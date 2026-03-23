@@ -5,40 +5,7 @@
 import { VNodeFlags } from './vdom';
 import { scheduleCallback, NormalPriority } from './scheduler';
 import { PatchType, diffChildrenKeyed } from './diff';
-const delegatedEvents = new Map();
-let rootElement = null;
-export function setRootElement(el) {
-    rootElement = el;
-    if (rootElement) {
-        rootElement.addEventListener('click', handleDelegatedEvent);
-        rootElement.addEventListener('input', handleDelegatedEvent);
-        rootElement.addEventListener('change', handleDelegatedEvent);
-        rootElement.addEventListener('submit', handleDelegatedEvent);
-        rootElement.addEventListener('focus', handleDelegatedEvent);
-        rootElement.addEventListener('blur', handleDelegatedEvent);
-        rootElement.addEventListener('keydown', handleDelegatedEvent);
-        rootElement.addEventListener('keyup', handleDelegatedEvent);
-        rootElement.addEventListener('mouseenter', handleDelegatedEvent);
-        rootElement.addEventListener('mouseleave', handleDelegatedEvent);
-    }
-}
-function handleDelegatedEvent(e) {
-    const target = e.target;
-    // Walk up the tree to find element with event handler
-    let current = target;
-    while (current && current !== rootElement) {
-        const handlers = current._eventHandlers;
-        if (handlers) {
-            const handler = handlers.get(e.type);
-            if (handler) {
-                e.preventDefault();
-                handler.call(current, e);
-                return;
-            }
-        }
-        current = current.parentElement;
-    }
-}
+import { setMemoRenderId } from './memo';
 /**
  * 渲染器类
  */
@@ -46,21 +13,72 @@ export class Renderer {
     constructor(container) {
         this.pendingUpdates = [];
         this.isRendering = false;
+        this.boundHandlers = new Map();
+        this.isHydrating = false;
+        this.renderId = 0; // Per-instance render counter for memoization
         this.context = {
             container,
             vnode: null,
             dom: null,
             signals: new Map()
         };
-        setRootElement(container);
+        this.setupEventDelegation(container);
+    }
+    /**
+     * 设置事件委托（每个容器独立）
+     */
+    setupEventDelegation(container) {
+        const events = ['click', 'input', 'change', 'submit', 'focus', 'blur', 'keydown', 'keyup', 'mouseenter', 'mouseleave'];
+        const handler = (e) => {
+            const target = e.target;
+            let current = target;
+            while (current && current !== container) {
+                const handlers = current._eventHandlers;
+                if (handlers) {
+                    const eventHandler = handlers.get(e.type);
+                    if (eventHandler) {
+                        e.preventDefault();
+                        eventHandler.call(current, e);
+                        return;
+                    }
+                }
+                current = current.parentElement;
+            }
+        };
+        events.forEach(eventName => {
+            const boundHandler = handler.bind(this);
+            this.boundHandlers.set(eventName, boundHandler);
+            container.addEventListener(eventName, boundHandler);
+        });
+    }
+    /**
+     * 标记为 hydration 模式
+     */
+    setHydrating(value) {
+        this.isHydrating = value;
     }
     /**
      * 渲染虚拟节点到 DOM
      */
     render(vnode) {
+        // 设置 memo renderId（每个Renderer实例独立的render cycle）
+        this.renderId++;
+        const memoRenderId = `r${this.renderId}-${Date.now()}`;
+        setMemoRenderId(memoRenderId);
         this.context.vnode = vnode;
         if (vnode === null) {
+            setMemoRenderId(null);
             this.unmount();
+            return;
+        }
+        // Hydration 模式下不清理 DOM
+        if (this.isHydrating) {
+            if (this.context.dom === null) {
+                this.context.dom = this.context.container.firstChild;
+                this.hydrateTree(this.context.dom, vnode);
+            }
+            this.isHydrating = false;
+            setMemoRenderId(null);
             return;
         }
         if (this.context.dom === null) {
@@ -73,6 +91,7 @@ export class Renderer {
             // 更新渲染
             this.patch(this.context.dom, vnode, this.context.vnode);
         }
+        setMemoRenderId(null);
     }
     /**
      * Hydrate - SSR 场景：复用已有 DOM，绑定事件
@@ -80,7 +99,9 @@ export class Renderer {
      */
     hydrate(vnode) {
         this.context.vnode = vnode;
+        this.isHydrating = true;
         if (!this.context.container.firstChild) {
+            this.isHydrating = false;
             this.render(vnode);
             return;
         }
@@ -88,6 +109,7 @@ export class Renderer {
         this.context.dom = this.context.container.firstChild;
         // 递归 hydrate
         this.hydrateTree(this.context.dom, vnode);
+        this.isHydrating = false;
     }
     /**
      * 递归 hydrate 树
@@ -430,9 +452,19 @@ export class Renderer {
         this.appendChildren(parent, newChildren);
     }
     applyPatches(parent, patches) {
-        // Apply patches in order
-        patches.forEach(patch => {
+        // Sort patches: REMOVE first, then UPDATE/INSERT, then MOVE last
+        // This ensures we don't mess up indices
+        const sortedPatches = [...patches].sort((a, b) => {
+            const order = { REMOVE: 0, UPDATE: 1, INSERT: 2, REPLACE: 2, MOVE: 3, TEXT: 4 };
+            return order[a.type] - order[b.type];
+        });
+        sortedPatches.forEach(patch => {
             switch (patch.type) {
+                case PatchType.REMOVE:
+                    if (parent.childNodes[patch.index || 0]) {
+                        parent.removeChild(parent.childNodes[patch.index || 0]);
+                    }
+                    break;
                 case PatchType.INSERT:
                 case PatchType.REPLACE:
                     if (patch.newNode) {
@@ -446,13 +478,30 @@ export class Renderer {
                         }
                     }
                     break;
-                case PatchType.REMOVE:
-                    if (parent.childNodes[patch.index || 0]) {
-                        parent.removeChild(parent.childNodes[patch.index || 0]);
+                case PatchType.UPDATE:
+                    // Handled by updateProps in patch phase
+                    break;
+                case PatchType.MOVE:
+                    if (patch.newNode) {
+                        // For MOVE, we need to find the existing DOM node by matching
+                        // This is a simplified approach - in production would need better DOM tracking
+                        const dom = this.createDom(patch.newNode);
+                        const refNode = parent.childNodes[patch.index || 0];
+                        if (refNode) {
+                            parent.insertBefore(dom, refNode);
+                        }
+                        else {
+                            parent.appendChild(dom);
+                        }
                     }
                     break;
-                case PatchType.UPDATE:
-                    // Handled by updateProps
+                case PatchType.TEXT:
+                    if (patch.props && typeof patch.props.text === 'string') {
+                        const textNode = parent.childNodes[patch.index || 0];
+                        if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                            textNode.textContent = patch.props.text;
+                        }
+                    }
                     break;
             }
         });
@@ -479,6 +528,11 @@ export class Renderer {
      * 销毁
      */
     destroy() {
+        // 移除事件监听
+        this.boundHandlers.forEach((handler, eventName) => {
+            this.context.container.removeEventListener(eventName, handler);
+        });
+        this.boundHandlers.clear();
         this.unmount();
         this.context.signals.clear();
     }

@@ -10,9 +10,16 @@ export type RefCallback<T> = (instance: T | null) => void;
 
 /**
  * useRef - Create a ref that persists across renders
+ *
+ * Note: If called with no initialValue, useRef<number>() returns { current: null }
+ * not { current: undefined }. This matches React behavior.
  */
-export function useRef<T>(initialValue: T | null = null): Ref<T> {
-  return ref(initialValue);
+export function useRef<T = undefined>(): Ref<T> {
+  return { current: null as T | null };
+}
+
+export function createRef<T>(): Ref<T> {
+  return { current: null };
 }
 
 /**

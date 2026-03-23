@@ -33,23 +33,60 @@ function shallowCompare(prevProps, nextProps) {
 }
 /**
  * useMemo - Memoize a computed value
+ *
+ * Uses a renderId-based cache that's scoped per render cycle.
+ * Each render gets its own cache segment via a unique renderId.
  */
-const memoCache = new Map();
+// Map of "renderId:depKey" -> { deps, value }
+const memoStore = new Map();
+// Current render ID (set by renderer)
+let currentRenderId = null;
 export function useMemo(compute, deps) {
-    // Simple implementation - in real runtime would integrate with renderer
-    const key = deps.join(',');
-    if (memoCache.has(key)) {
-        return memoCache.get(key);
+    if (!currentRenderId) {
+        // No render context - compute without caching
+        return compute();
+    }
+    const key = `${currentRenderId}:${deps.map(d => d ?? 'null').join(',')}`;
+    const entry = memoStore.get(key);
+    if (entry && depsEqual(entry.deps, deps)) {
+        return entry.value;
     }
     const value = compute();
-    memoCache.set(key, value);
+    memoStore.set(key, { deps: [...deps], value });
     return value;
+}
+// Check if deps are equal by value (not reference)
+function depsEqual(a, b) {
+    if (a.length !== b.length)
+        return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i])
+            return false;
+    }
+    return true;
 }
 /**
  * useCallback - Memoize a callback function
  */
 export function useCallback(callback, deps) {
     return useMemo(() => callback, deps);
+}
+/**
+ * Clear memo cache for a render ID (call at render start)
+ */
+export function clearMemoCache(renderId) {
+    const prefix = `${renderId}:`;
+    for (const key of memoStore.keys()) {
+        if (key.startsWith(prefix)) {
+            memoStore.delete(key);
+        }
+    }
+}
+/**
+ * Set render ID for memoization tracking (call by renderer)
+ */
+export function setMemoRenderId(id) {
+    currentRenderId = id;
 }
 export function isMemoized(fn) {
     return fn && typeof fn === 'function' && 'displayName' in fn && fn.displayName?.startsWith('memo(');

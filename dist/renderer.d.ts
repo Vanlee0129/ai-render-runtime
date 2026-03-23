@@ -5,7 +5,6 @@
 import { VNode } from './vdom';
 import { Signal } from './signal';
 type EventHandler = (e: Event) => void;
-export declare function setRootElement(el: Element): void;
 declare global {
     interface Element {
         _eventHandlers?: Map<string, EventHandler>;
@@ -32,7 +31,18 @@ export declare class Renderer {
     private context;
     private pendingUpdates;
     private isRendering;
+    private boundHandlers;
+    private isHydrating;
+    private renderId;
     constructor(container: Element);
+    /**
+     * 设置事件委托（每个容器独立）
+     */
+    private setupEventDelegation;
+    /**
+     * 标记为 hydration 模式
+     */
+    setHydrating(value: boolean): void;
     /**
      * 渲染虚拟节点到 DOM
      */

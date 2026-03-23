@@ -22,9 +22,6 @@ export declare class Signal<T> {
     computed<T>(fn: () => T): Signal<T>;
 }
 export declare function track<T>(fn: () => T): T;
-/**
- * Effect - 自动追踪依赖的副作用
- */
 export declare function createEffect(fn: Effect): () => void;
 export declare function batch(fn: () => void): void;
 /**

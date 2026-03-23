@@ -8,45 +8,10 @@ import { Ref } from './refs';
 import { Signal, batch, createSignal } from './signal';
 import { scheduleCallback, NormalPriority } from './scheduler';
 import { diff, batchDiff, reconcile, Patch, PatchType, diffChildrenKeyed } from './diff';
+import { setMemoRenderId, clearMemoCache } from './memo';
 
 // Event delegation system
 type EventHandler = (e: Event) => void;
-const delegatedEvents = new Map<string, Set<EventHandler>>();
-let rootElement: Element | null = null;
-
-export function setRootElement(el: Element): void {
-  rootElement = el;
-  if (rootElement) {
-    rootElement.addEventListener('click', handleDelegatedEvent);
-    rootElement.addEventListener('input', handleDelegatedEvent);
-    rootElement.addEventListener('change', handleDelegatedEvent);
-    rootElement.addEventListener('submit', handleDelegatedEvent);
-    rootElement.addEventListener('focus', handleDelegatedEvent);
-    rootElement.addEventListener('blur', handleDelegatedEvent);
-    rootElement.addEventListener('keydown', handleDelegatedEvent);
-    rootElement.addEventListener('keyup', handleDelegatedEvent);
-    rootElement.addEventListener('mouseenter', handleDelegatedEvent);
-    rootElement.addEventListener('mouseleave', handleDelegatedEvent);
-  }
-}
-
-function handleDelegatedEvent(e: Event): void {
-  const target = e.target as Element;
-  // Walk up the tree to find element with event handler
-  let current: Element | null = target;
-  while (current && current !== rootElement) {
-    const handlers = current._eventHandlers as Map<string, EventHandler> | undefined;
-    if (handlers) {
-      const handler = handlers.get(e.type);
-      if (handler) {
-        e.preventDefault();
-        handler.call(current, e);
-        return;
-      }
-    }
-    current = current.parentElement;
-  }
-}
 
 declare global {
   interface Element {
@@ -77,7 +42,10 @@ export class Renderer {
   private context: RenderContext;
   private pendingUpdates: (() => void)[] = [];
   private isRendering = false;
-  
+  private boundHandlers: Map<string, EventListener> = new Map();
+  private isHydrating = false;
+  private renderId = 0;  // Per-instance render counter for memoization
+
   constructor(container: Element) {
     this.context = {
       container,
@@ -85,20 +53,75 @@ export class Renderer {
       dom: null,
       signals: new Map()
     };
-    setRootElement(container);
+    this.setupEventDelegation(container);
+  }
+
+  /**
+   * 设置事件委托（每个容器独立）
+   */
+  private setupEventDelegation(container: Element): void {
+    const events = ['click', 'input', 'change', 'submit', 'focus', 'blur', 'keydown', 'keyup', 'mouseenter', 'mouseleave'];
+
+    const handler = (e: Event) => {
+      const target = e.target as Element;
+      let current: Element | null = target;
+
+      while (current && current !== container) {
+        const handlers = current._eventHandlers as Map<string, EventHandler> | undefined;
+        if (handlers) {
+          const eventHandler = handlers.get(e.type);
+          if (eventHandler) {
+            e.preventDefault();
+            eventHandler.call(current, e);
+            return;
+          }
+        }
+        current = current.parentElement;
+      }
+    };
+
+    events.forEach(eventName => {
+      const boundHandler = handler.bind(this);
+      this.boundHandlers.set(eventName, boundHandler);
+      container.addEventListener(eventName, boundHandler);
+    });
+  }
+
+  /**
+   * 标记为 hydration 模式
+   */
+  setHydrating(value: boolean): void {
+    this.isHydrating = value;
   }
   
   /**
    * 渲染虚拟节点到 DOM
    */
   render(vnode: VNode | null): void {
+    // 设置 memo renderId（每个Renderer实例独立的render cycle）
+    this.renderId++;
+    const memoRenderId = `r${this.renderId}-${Date.now()}`;
+    setMemoRenderId(memoRenderId);
+
     this.context.vnode = vnode;
-    
+
     if (vnode === null) {
+      setMemoRenderId(null);
       this.unmount();
       return;
     }
-    
+
+    // Hydration 模式下不清理 DOM
+    if (this.isHydrating) {
+      if (this.context.dom === null) {
+        this.context.dom = this.context.container.firstChild as Element;
+        this.hydrateTree(this.context.dom, vnode);
+      }
+      this.isHydrating = false;
+      setMemoRenderId(null);
+      return;
+    }
+
     if (this.context.dom === null) {
       // 首次渲染
       const dom = this.createDom(vnode);
@@ -108,6 +131,8 @@ export class Renderer {
       // 更新渲染
       this.patch(this.context.dom as Element, vnode, this.context.vnode);
     }
+
+    setMemoRenderId(null);
   }
   
   /**
@@ -116,8 +141,10 @@ export class Renderer {
    */
   hydrate(vnode: VNode): void {
     this.context.vnode = vnode;
+    this.isHydrating = true;
 
     if (!this.context.container.firstChild) {
+      this.isHydrating = false;
       this.render(vnode);
       return;
     }
@@ -127,6 +154,7 @@ export class Renderer {
 
     // 递归 hydrate
     this.hydrateTree(this.context.dom, vnode);
+    this.isHydrating = false;
   }
 
   /**
@@ -526,9 +554,21 @@ export class Renderer {
   }
 
   private applyPatches(parent: Element, patches: Patch[]): void {
-    // Apply patches in order
-    patches.forEach(patch => {
+    // Sort patches: REMOVE first, then UPDATE/INSERT, then MOVE last
+    // This ensures we don't mess up indices
+    const sortedPatches = [...patches].sort((a, b) => {
+      const order = { REMOVE: 0, UPDATE: 1, INSERT: 2, REPLACE: 2, MOVE: 3, TEXT: 4 };
+      return order[a.type as keyof typeof order] - order[b.type as keyof typeof order];
+    });
+
+    sortedPatches.forEach(patch => {
       switch (patch.type) {
+        case PatchType.REMOVE:
+          if (parent.childNodes[patch.index || 0]) {
+            parent.removeChild(parent.childNodes[patch.index || 0]);
+          }
+          break;
+
         case PatchType.INSERT:
         case PatchType.REPLACE:
           if (patch.newNode) {
@@ -541,13 +581,32 @@ export class Renderer {
             }
           }
           break;
-        case PatchType.REMOVE:
-          if (parent.childNodes[patch.index || 0]) {
-            parent.removeChild(parent.childNodes[patch.index || 0]);
+
+        case PatchType.UPDATE:
+          // Handled by updateProps in patch phase
+          break;
+
+        case PatchType.MOVE:
+          if (patch.newNode) {
+            // For MOVE, we need to find the existing DOM node by matching
+            // This is a simplified approach - in production would need better DOM tracking
+            const dom = this.createDom(patch.newNode);
+            const refNode = parent.childNodes[patch.index || 0];
+            if (refNode) {
+              parent.insertBefore(dom, refNode);
+            } else {
+              parent.appendChild(dom);
+            }
           }
           break;
-        case PatchType.UPDATE:
-          // Handled by updateProps
+
+        case PatchType.TEXT:
+          if (patch.props && typeof patch.props.text === 'string') {
+            const textNode = parent.childNodes[patch.index || 0];
+            if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+              textNode.textContent = patch.props.text;
+            }
+          }
           break;
       }
     });
@@ -578,6 +637,12 @@ export class Renderer {
    * 销毁
    */
   destroy(): void {
+    // 移除事件监听
+    this.boundHandlers.forEach((handler, eventName) => {
+      this.context.container.removeEventListener(eventName, handler);
+    });
+    this.boundHandlers.clear();
+
     this.unmount();
     this.context.signals.clear();
   }

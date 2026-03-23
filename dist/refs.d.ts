@@ -5,8 +5,12 @@ export declare function ref<T>(initialValue?: T | null): Ref<T>;
 export type RefCallback<T> = (instance: T | null) => void;
 /**
  * useRef - Create a ref that persists across renders
+ *
+ * Note: If called with no initialValue, useRef<number>() returns { current: null }
+ * not { current: undefined }. This matches React behavior.
  */
-export declare function useRef<T>(initialValue?: T | null): Ref<T>;
+export declare function useRef<T = undefined>(): Ref<T>;
+export declare function createRef<T>(): Ref<T>;
 /**
  * forwardRef - Forward ref through component
  */

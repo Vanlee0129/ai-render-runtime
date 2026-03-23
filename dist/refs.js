@@ -3,9 +3,15 @@ export function ref(initialValue = null) {
 }
 /**
  * useRef - Create a ref that persists across renders
+ *
+ * Note: If called with no initialValue, useRef<number>() returns { current: null }
+ * not { current: undefined }. This matches React behavior.
  */
-export function useRef(initialValue = null) {
-    return ref(initialValue);
+export function useRef() {
+    return { current: null };
+}
+export function createRef() {
+    return { current: null };
 }
 /**
  * forwardRef - Forward ref through component

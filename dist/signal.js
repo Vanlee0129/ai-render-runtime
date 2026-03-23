@@ -77,7 +77,14 @@ export function track(fn) {
 }
 /**
  * Effect - 自动追踪依赖的副作用
+ *
+ * Uses a global WeakMap to track subscriptions without polluting prototypes.
+ * This is safe for concurrent effects.
  */
+// Global tracking: effect -> Set of signals it subscribed to
+const effectSubscriptions = new WeakMap();
+// Global tracking: signal -> Set of effects subscribed to it
+const signalSubscribers = new WeakMap();
 export function createEffect(fn) {
     const effect = () => {
         const prev = currentTracking;
@@ -89,25 +96,42 @@ export function createEffect(fn) {
             currentTracking = prev;
         }
     };
-    // Track subscribed signals for cleanup
+    // Track subscribed signals for cleanup (non-Window-compatible WeakMap requires object keys)
     const subscribedSignals = new Set();
-    // Wrapper to track subscriptions during effect run
+    // Wrapper that tracks subscriptions
     const trackedEffect = () => {
         const prev = currentTracking;
         currentTracking = effect;
         subscribedSignals.clear();
-        // Patch subscribe to track
-        const origSubscribe = Signal.prototype.subscribe;
-        Signal.prototype.subscribe = function (fn) {
-            subscribedSignals.add(this);
-            return origSubscribe.call(this, fn);
+        // Override Signal.get() temporarily to track subscriptions
+        const originalGet = Signal.prototype.get;
+        Signal.prototype.get = function () {
+            if (currentTracking) {
+                // Track this signal as being subscribed
+                subscribedSignals.add(this);
+                // Also track in global map for cross-effect cleanup
+                let effects = signalSubscribers.get(this);
+                if (!effects) {
+                    effects = new Set();
+                    signalSubscribers.set(this, effects);
+                }
+                effects.add(currentTracking);
+                // Track in effect's local set for cleanup
+                let subscribed = effectSubscriptions.get(currentTracking);
+                if (!subscribed) {
+                    subscribed = new Set();
+                    effectSubscriptions.set(currentTracking, subscribed);
+                }
+                subscribed.add(this);
+            }
+            return originalGet.call(this);
         };
         try {
             fn();
         }
         finally {
             currentTracking = prev;
-            Signal.prototype.subscribe = origSubscribe;
+            Signal.prototype.get = originalGet;
         }
     };
     // Immediately execute to establish dependencies
@@ -117,7 +141,20 @@ export function createEffect(fn) {
         // Unsubscribe from all tracked signals
         subscribedSignals.forEach(signal => {
             signal.subscribers.delete(effect);
+            // Also clean up global tracking
+            const effects = signalSubscribers.get(signal);
+            if (effects) {
+                effects.delete(effect);
+                if (effects.size === 0) {
+                    signalSubscribers.delete(signal);
+                }
+            }
         });
+        // Clean up effect's subscription set
+        const subscribed = effectSubscriptions.get(effect);
+        if (subscribed) {
+            effectSubscriptions.delete(effect);
+        }
         subscribedSignals.clear();
     };
 }

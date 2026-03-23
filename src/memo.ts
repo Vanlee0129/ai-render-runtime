@@ -50,20 +50,42 @@ function shallowCompare<P>(prevProps: P, nextProps: P): boolean {
 
 /**
  * useMemo - Memoize a computed value
+ *
+ * Uses a renderId-based cache that's scoped per render cycle.
+ * Each render gets its own cache segment via a unique renderId.
  */
-const memoCache = new Map<string, any>();
+
+// Map of "renderId:depKey" -> { deps, value }
+const memoStore = new Map<string, { deps: any[]; value: any }>();
+
+// Current render ID (set by renderer)
+let currentRenderId: string | null = null;
 
 export function useMemo<T>(compute: () => T, deps: any[]): T {
-  // Simple implementation - in real runtime would integrate with renderer
-  const key = deps.join(',');
+  if (!currentRenderId) {
+    // No render context - compute without caching
+    return compute();
+  }
 
-  if (memoCache.has(key)) {
-    return memoCache.get(key) as T;
+  const key = `${currentRenderId}:${deps.map(d => d ?? 'null').join(',')}`;
+
+  const entry = memoStore.get(key);
+  if (entry && depsEqual(entry.deps, deps)) {
+    return entry.value as T;
   }
 
   const value = compute();
-  memoCache.set(key, value);
+  memoStore.set(key, { deps: [...deps], value });
   return value;
+}
+
+// Check if deps are equal by value (not reference)
+function depsEqual(a: any[], b: any[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
 
 /**
@@ -74,6 +96,25 @@ export function useCallback<T extends (...args: any[]) => any>(
   deps: any[]
 ): T {
   return useMemo(() => callback, deps) as T;
+}
+
+/**
+ * Clear memo cache for a render ID (call at render start)
+ */
+export function clearMemoCache(renderId: string): void {
+  const prefix = `${renderId}:`;
+  for (const key of memoStore.keys()) {
+    if (key.startsWith(prefix)) {
+      memoStore.delete(key);
+    }
+  }
+}
+
+/**
+ * Set render ID for memoization tracking (call by renderer)
+ */
+export function setMemoRenderId(id: string | null): void {
+  currentRenderId = id;
 }
 
 export function isMemoized(fn: any): boolean {
