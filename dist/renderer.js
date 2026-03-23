@@ -2,10 +2,21 @@
  * AI Render Runtime - Renderer
  * 核心渲染引擎
  */
-import { VNodeFlags } from './vdom';
+import { VNodeFlags, PatchFlags } from './vdom';
 import { scheduleCallback, NormalPriority } from './scheduler';
 import { PatchType, diffChildrenKeyed } from './diff';
 import { setMemoRenderId } from './memo';
+import { setCurrentRenderer } from './context';
+import { setCurrentComponentInstance, callHook } from './lifecycle';
+function shouldKeepAlive(key, props) {
+    if (props.exclude?.includes(key)) {
+        return false;
+    }
+    if (props.include && !props.include.includes(key)) {
+        return false;
+    }
+    return true;
+}
 /**
  * 渲染器类
  */
@@ -61,6 +72,8 @@ export class Renderer {
      * 渲染虚拟节点到 DOM
      */
     render(vnode) {
+        // 设置当前渲染器上下文，用于 Context API
+        setCurrentRenderer(this);
         // 设置 memo renderId（每个Renderer实例独立的render cycle）
         this.renderId++;
         const memoRenderId = `r${this.renderId}-${Date.now()}`;
@@ -68,6 +81,7 @@ export class Renderer {
         this.context.vnode = vnode;
         if (vnode === null) {
             setMemoRenderId(null);
+            setCurrentRenderer(null);
             this.unmount();
             return;
         }
@@ -79,6 +93,7 @@ export class Renderer {
             }
             this.isHydrating = false;
             setMemoRenderId(null);
+            setCurrentRenderer(null);
             return;
         }
         if (this.context.dom === null) {
@@ -92,6 +107,7 @@ export class Renderer {
             this.patch(this.context.dom, vnode, this.context.vnode);
         }
         setMemoRenderId(null);
+        setCurrentRenderer(null);
     }
     /**
      * Hydrate - SSR 场景：复用已有 DOM，绑定事件
@@ -263,24 +279,34 @@ export class Renderer {
         const Component = vnode.type;
         const props = vnode.props || {};
         try {
+            // Set current component for lifecycle hooks
+            setCurrentComponentInstance(Component);
+            // Call onBeforeMount
+            callHook(Component, 'onBeforeMount');
             const result = Component(props);
+            // Handle promise (async component threw)
+            if (result instanceof Promise) {
+                // This is an async component - we'll render fallback during loading
+                // For now, return a placeholder comment node
+                setCurrentComponentInstance(null);
+                return document.createComment('Async Component Loading');
+            }
+            setCurrentComponentInstance(null);
             if (result === null) {
                 return document.createComment('Empty Component');
             }
             const dom = this.createDom(result);
             dom._component = vnode;
-            // Transfer event handlers from vnode to actual DOM
-            if (vnode.props && dom._eventHandlers) {
-                for (const key in vnode.props) {
-                    if (key.startsWith('on') && typeof vnode.props[key] === 'function') {
-                        const eventName = key.slice(2).toLowerCase();
-                        dom._eventHandlers.set(eventName, vnode.props[key]);
-                    }
-                }
-            }
+            // Call onMounted after DOM is created
+            callHook(Component, 'onMounted');
             return dom;
         }
         catch (e) {
+            setCurrentComponentInstance(null);
+            // Check if it's a promise (async component error boundary)
+            if (e instanceof Promise) {
+                return document.createComment('Suspended');
+            }
             console.error('Component render error:', e);
             return document.createComment('Error');
         }
@@ -381,14 +407,30 @@ export class Renderer {
             return;
         }
         // 更新属性
-        this.updateProps(parent, newVNode.props, oldVNode.props);
+        this.updateProps(parent, newVNode.props, oldVNode.props, newVNode.patchFlag);
         // 更新子节点
         this.updateChildren(parent, newVNode.children, oldVNode.children);
     }
     /**
      * 更新属性
      */
-    updateProps(dom, newProps, oldProps) {
+    updateProps(dom, newProps, oldProps, patchFlag) {
+        // If specific patchFlag is set, only update that
+        if (patchFlag === PatchFlags.CLASS) {
+            const newClass = newProps?.className ?? newProps?.class;
+            const oldClass = oldProps?.className ?? oldProps?.class;
+            if (newClass !== oldClass) {
+                dom.setAttribute('class', newClass || '');
+            }
+            return;
+        }
+        if (patchFlag === PatchFlags.STYLE) {
+            if (typeof newProps?.style === 'object') {
+                Object.assign(dom.style, newProps.style);
+            }
+            return;
+        }
+        // Default: full props update
         const allProps = new Set([...Object.keys(newProps || {}), ...Object.keys(oldProps || {})]);
         allProps.forEach(key => {
             if (key === 'children' || key === 'key')

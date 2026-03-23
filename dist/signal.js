@@ -243,4 +243,130 @@ export function createArraySignal(initialValue) {
         }
     };
 }
+/**
+ * createLazyComputed - Vue 3 style lazy computed
+ * Only recomputes when first accessed and only updates on access after dependency changes
+ */
+export function createLazyComputed(compute) {
+    let value;
+    let hasValue = false;
+    let dirty = true;
+    let currentTracking = null;
+    const signal = new Signal(undefined);
+    // Subscribe to track dependencies
+    const trackedCompute = () => {
+        const prev = currentTracking;
+        currentTracking = () => {
+            dirty = true;
+        };
+        try {
+            value = compute();
+            hasValue = true;
+            dirty = false;
+        }
+        finally {
+            currentTracking = prev;
+        }
+    };
+    // Run once to initialize
+    trackedCompute();
+    // Return getter that only recomputes when dirty
+    return () => {
+        if (dirty) {
+            trackedCompute();
+        }
+        return value;
+    };
+}
+/**
+ * ComputedSignal - A computed signal that caches its value
+ * Similar to Vue 3's computed
+ */
+export class ComputedSignal {
+    constructor(fn) {
+        this.subscribers = new Set();
+        this.dirty = true;
+        this.trackingSignal = null;
+        this.computeFn = fn;
+        this.value = fn();
+    }
+    get() {
+        // Collect dependency tracking
+        if (currentTracking) {
+            this.subscribers.add(currentTracking);
+        }
+        if (this.dirty) {
+            // Track signals accessed during computation
+            const prevTracking = currentTracking;
+            currentTracking = () => {
+                this.markDirty();
+            };
+            try {
+                this.value = this.computeFn();
+                this.dirty = false;
+            }
+            finally {
+                currentTracking = prevTracking;
+            }
+        }
+        return this.value;
+    }
+    markDirty() {
+        this.dirty = true;
+        this.notify();
+    }
+    notify() {
+        batch(() => {
+            this.subscribers.forEach(fn => fn());
+        });
+    }
+}
+/**
+ * createWatch - Enhanced watch with options (Vue 3 style)
+ */
+export function createWatch(source, callback, options = {}) {
+    let oldValue;
+    let hasRun = false;
+    let cleanup;
+    const fn = () => {
+        const newValue = source();
+        if (hasRun) {
+            const prev = oldValue;
+            oldValue = newValue;
+            callback(newValue, prev);
+        }
+        else {
+            oldValue = newValue;
+            hasRun = true;
+            if (options.immediate) {
+                callback(newValue, undefined);
+            }
+        }
+    };
+    // Create effect to track source
+    const stopEffect = createEffect(fn);
+    const stop = () => {
+        if (cleanup) {
+            cleanup();
+            cleanup = undefined;
+        }
+        stopEffect();
+    };
+    if (options.onCleanup) {
+        options.onCleanup(() => {
+            if (cleanup) {
+                cleanup();
+                cleanup = undefined;
+            }
+            stopEffect();
+        });
+    }
+    return stop;
+}
+/**
+ * watch - Shorthand for createWatch
+ */
+export function watch(source, callback, options) {
+    return createWatch(source, callback, options);
+}
 //# sourceMappingURL=signal.js.map

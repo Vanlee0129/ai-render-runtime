@@ -3,6 +3,8 @@
  * 轻量级组件注册表
  */
 import { VNode } from './vdom';
+import { Spec } from './spec-contract';
+export declare function wrapToSpec(spec: ComponentSpec | ComponentSpec[], intent?: string): Spec;
 export interface ComponentSpec {
     type: string;
     [key: string]: any;

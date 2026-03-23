@@ -1,6 +1,6 @@
 # AI Render Runtime
 
-> 将 AI 生成的结构化数据直接渲染为 UI 组件的引擎
+> 下一代 AI Native 渲染引擎 - AI 是核心，前端是输出
 
 [English](./README.en.md) | 中文
 
@@ -13,27 +13,31 @@
 - [AI Native 特性](#ai-native-特性)
 - [API 参考](#api-参考)
 - [安全建议](#安全建议)
-- [核心概念](#核心概念)
 
 ---
 
 ## 核心价值
 
-**AI Native** - 不是另一个 React，而是专为 AI 设计的渲染引擎：
+**AI Native** - 重新定义前端范式：
 
 ```
-AI 输出 JSON → AIRender.render() → 高性能 UI
+传统: 前端主导，AI 是工具
+     React/Vue ← 调用 AI → AI 输出内容
+
+AI Native: AI 是核心，前端是输出
+     AI Runtime → Spec 契约 → 多平台渲染
 ```
 
 ### 与 React/Vue 的区别
 
 | 特性 | React/Vue | AI Render |
 |------|-----------|-----------|
-| 核心输入 | JSX/模板 | AI JSON Spec |
-| 状态来源 | 开发者定义 | AI 动态生成 |
-| 更新方式 | 手动 setState | AI 输出自动渲染 |
+| 核心驱动 | 开发者代码 | AI 意图理解 |
+| UI 来源 | JSX/模板 | AI 动态生成 |
+| 状态管理 | 手动 setState | AI 决策 + 状态快照 |
+| 交互处理 | 事件监听器 | Intent Engine |
 | 热更新 | 需手动处理 | 内置 `air.update()` |
-| AI 集成 | 外部实现 | 内置适配器 |
+| 状态历史 | 外部实现 | 内置 Memento |
 
 ---
 
@@ -54,16 +58,17 @@ AI 输出 JSON → AIRender.render() → 高性能 UI
 ### 使用 AI Render
 
 ```
-1. AI 返回 JSON
-2. AIRender.render() 直接渲染
-3. 用户看到结果
+1. AI 理解用户意图
+2. AI 生成 Spec 契约
+3. AIRender 直接渲染
+4. 用户看到结果
 ```
 
 **优势**：
 - 零手工转换
-- 实时渲染 AI 输出
-- 内置热更新
-- 支持流式生成
+- AI 驱动的动态界面
+- 内置状态历史（可回溯）
+- 支持流式生成和实时更新
 
 ---
 
@@ -78,7 +83,7 @@ npm run build
 
 ### 方式 1: AI 驱动渲染（核心场景）
 
-**关键**：AI 调用应在后端进行，前端只负责渲染。以下是正确的集成模式：
+**关键**：AI 调用应在后端进行，前端只负责渲染。
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -96,171 +101,48 @@ import { AIRender } from 'ai-render-runtime';
 // 只负责渲染 AI 返回的 Spec
 const app = new AIRender({
   container: '#app',
-  initialSpec: null  // 初始为空，等待后端返回
+  initialSpec: null
 });
 
 // 通过后端 API 获取 AI 生成的 Spec
-async function fetchAISpec(prompt) {
-  // 注意：API 调用在后端，前端只请求自己的服务
-  const response = await fetch('/api/generate-ui', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt })
-  });
-  return response.json();  // 返回 { spec: {...} }
-}
-
-// 使用
-const { spec } = await fetchAISpec('创建一个登录表单');
+const { spec } = await fetch('/api/generate-ui', {
+  method: 'POST',
+  body: JSON.stringify({ prompt: '创建一个仪表盘' })
+});
 app.update(spec);
 ```
 
-**后端代码示例（Node.js）**：
+### 方式 2: Intent 驱动交互
 
-```javascript
-// server.js - 安全的 API 代理
-const express = require('express');
-const { callAI } = require('ai-render-runtime');
-
-const app = express();
-app.use(express.json());
-
-app.post('/api/generate-ui', async (req, res) => {
-  const { prompt } = req.body;
-
-  try {
-    // API Key 只在后端使用，绝不暴露给前端
-    const response = await callAI('openai', {
-      apiKey: process.env.OPENAI_API_KEY,  // 环境变量
-      model: 'gpt-4'
-    }, prompt);
-
-    const spec = JSON.parse(response.content);
-    res.json({ spec });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.listen(3000);
-```
-
-### 方式 2: 使用内置 AI 生成器（仅开发/演示）
-
-如果你的 AI API 支持 CORS 或你使用代理，可以直接使用内置生成器：
-
-```javascript
-import { createAIGen } from 'ai-render-runtime';
-
-const gen = createAIGen({
-  container: '#app',
-  apiKey: 'your-api-key',  // 仅用于演示，不推荐生产环境
-  provider: 'openai',
-  apiUrl: '/api/proxy',  // 指向你的后端代理
-  model: 'gpt-4'
-});
-
-// 生成并渲染
-await gen.generate('创建一个仪表盘');
-```
-
-### 方式 3: Intent 路由 + AI 理解
-
-**关键**：Intent 路由让你的 AI UI 具备交互能力：
+**关键**：用户交互触发 Intent，AI 理解后生成新 Spec：
 
 ```
-用户点击按钮 → Intent 触发 → 后端 AI 理解意图 → 返回新 Spec → 热更新 UI
+用户点击 → Intent Engine → AI 理解意图 → Spec 生成 → 热更新 UI
 ```
 
 ```javascript
-import { createIntentRouter, AIRender } from 'ai-render-runtime';
+import { AIRender, IntentEngine, createSpec } from 'ai-render-runtime';
 
-// 1. 创建渲染器
 const app = new AIRender({ container: '#app' });
+const intentEngine = new IntentEngine();
 
-// 2. 创建 Intent 路由
-const router = createIntentRouter();
-
-// 3. 注册 Intent 处理器（指向你的后端 AI 服务）
-router.register('onClick', async (payload) => {
-  // 发送到后端，后端调用 AI 理解意图
-  const response = await fetch('/api/ai-understand', {
+// 注册 Intent 处理器
+intentEngine.register('show_dashboard', async (intent, context) => {
+  const response = await fetch('/api/ai', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      action: 'click',
-      element: payload.id,
-      context: payload
+      intent: intent.type,
+      entities: intent.entities
     })
   });
-  return response.json();  // 返回 { spec: {...} } 或 { command: '...' }
+  return { spec: await response.json() };
 });
 
-router.register('onSubmit', async (payload) => {
-  const response = await fetch('/api/ai-understand', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'submit',
-      formData: payload,
-      context: 'login_form'
-    })
-  });
-  return response.json();
-});
-
-// 4. 初始渲染（后端返回第一个 AI UI）
-const { spec } = await fetch('/api/ai-initial');
-app.update(spec);
-
-// 5. 绑定 Intent 到 AI 生成的 UI
-// 假设 AI 返回的按钮有 data-intent="onClick" 属性
-document.addEventListener('click', async (e) => {
-  const intentElement = e.target.closest('[data-intent]');
-  if (intentElement) {
-    const intentName = intentElement.dataset.intent;
-    const payload = { id: intentElement.id, value: intentElement.value };
-
-    const result = await router.handle(intentName, payload);
-
-    // 如果返回新 Spec，热更新 UI
-    if (result && result.spec) {
-      app.update(result.spec);
-    }
-  }
-});
-```
-
-**后端 AI 理解服务**：
-
-```javascript
-// server.js - AI 理解服务
-app.post('/api/ai-understand', async (req, res) => {
-  const { action, element, context } = req.body;
-
-  // 构造提示词，让 AI 决定下一步 UI
-  const prompt = `
-    用户在 AI 生成的 UI 上执行了操作：
-    - 操作类型: ${action}
-    - 元素: ${element}
-    - 上下文: ${JSON.stringify(context)}
-
-    根据用户意图，返回下一个 UI 的 JSON Spec。
-    如果用户要填写表单，返回带输入值的表单。
-    如果用户点击了按钮，返回按钮点击后的结果 UI。
-  `;
-
-  const response = await callAI('openai', {
-    apiKey: process.env.OPENAI_API_KEY,
-    model: 'gpt-4'
-  }, prompt);
-
-  try {
-    const spec = JSON.parse(response.content);
-    res.json({ spec });
-  } catch {
-    res.status(500).json({ error: 'Failed to parse AI response' });
-  }
+// 处理用户交互
+app.processIntent({
+  type: 'show_dashboard',
+  confidence: 1.0,
+  entities: { view: 'dashboard' }
 });
 ```
 
@@ -272,445 +154,260 @@ app.post('/api/ai-understand', async (req, res) => {
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      AI Render Runtime                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────┐ │
-│  │ AI Adapter │───▶│   Parser   │───▶│  AIRender       │ │
-│  └─────────────┘    └─────────────┘    │                 │ │
-│                                          │  ┌───────────┐ │ │
-│  ┌─────────────┐    ┌─────────────┐      │  │ Registry  │ │ │
-│  │ AIStream   │───▶│ Spec JSON  │──────▶│  └─────┬─────┘ │ │
-│  └─────────────┘    └─────────────┘      │        │       │ │
-│                                          │        ▼       │ │
-│  ┌─────────────┐    ┌─────────────┐      │  ┌─────────┐  │ │
-│  │IntentRouter│◀───│  Events    │◀─────│  │Renderer │  │ │
-│  └─────────────┘    └─────────────┘      │  └───┬─────┘  │ │
-│                                          │      │         │ │
-│                                          └──────┼─────────┘ │
-│                                                 │          │
-│  ┌─────────────────────────────────────────────┼──────────┤
-│  │                  Core Engine                │          │
-│  ├─────────────────────────────────────────────┼──────────┤
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐   │          │
-│  │  │ Signal  │  │  VDOM   │  │  Diff   │   │          │
-│  │  │(响应式) │  │(虚拟DOM) │  │(差异)   │   │          │
-│  │  └─────────┘  └─────────┘  └─────────┘   │          │
-│  │                                             │          │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐   │          │
-│  │  │Lifecycle │  │ Context │  │  Memo   │   │          │
-│  │  │(生命周期)│  │(上下文) │  │(记忆化) │   │          │
-│  │  └─────────┘  └─────────┘  └─────────┘   │          │
-│  └─────────────────────────────────────────────────────────┘
+│                    Deployment Targets                          │
+├─────────────┬──────────────────┬─────────────────────────────┤
+│  SDK/npm    │   Standalone     │      WASM                  │
+│  (嵌入)     │   (进程服务)      │   (浏览器/离线)            │
+└─────────────┴──────────────────┴─────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Platform Abstraction Layer                   │
+│      窗口管理 | 文件系统 | 网络 | 输入设备抽象                │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Rendering Runtime (TS / Rust)                    │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐       │
+│   │ Browser     │  │ Desktop     │  │ Mobile      │       │
+│   │ (Canvas/DOM)│  │ (Tauri/Native)│ │ (Future)   │       │
+│   └─────────────┘  └─────────────┘  └─────────────┘       │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Spec Contract (JSON)                      │
+│         版本化契约 • 可传输 • 可存储 • 可重放                 │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│               AI Native Core Runtime (Rust/TS)               │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐              │
+│  │  Intent   │  │   Spec    │  │  Action   │              │
+│  │  Engine   │──▶│ Generator │──▶│  Engine   │              │
+│  └───────────┘  └───────────┘  └───────────┘              │
+│        │                │                │                 │
+│        ▼                ▼                ▼                 │
+│  ┌─────────────────────────────────────────────┐           │
+│  │           State Store (Memento Pattern)      │           │
+│  │     快照保存 • 状态恢复 • 操作重放           │           │
+│  └─────────────────────────────────────────────┘           │
+│                          │                                  │
+│                          ▼                                  │
+│  ┌─────────────────────────────────────────────┐           │
+│  │     Render Orchestrator (双路径渲染)         │           │
+│  │   标准路径: Spec → UI                       │           │
+│  │   快速路径: Intent → 直接渲染               │           │
+│  └─────────────────────────────────────────────┘           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+---
+
 ### 核心模块
 
-#### 1. AI Adapter Layer（AI 适配层）
+#### 1. Spec Contract（契约层）
 
-```
-┌─────────────────────────────────────────┐
-│            AI Adapter                     │
-├─────────────────────────────────────────┤
-│                                         │
-│  callAI(provider, config, prompt)       │
-│       │                                 │
-│       ├──▶ MiniMax Adapter             │
-│       ├──▶ OpenAI Adapter              │
-│       └──▶ Anthropic Adapter            │
-│                                         │
-│  parseAIResponse(content)               │
-│       │                                 │
-│       └──▶ JSON Extractor              │
-│              - markdown 代码块提取       │
-│              - 括号范围提取             │
-│              - 容错解析                 │
-│                                         │
-└─────────────────────────────────────────┘
-```
+```typescript
+interface Spec {
+  version: string;           // 契约版本
+  intent: string;            // Intent 类型
+  view: ViewSpec;           // 视图描述
+  actions: ActionSpec[];     // 可用动作
+  state: Record<string, any>; // 视图状态
+  meta: {
+    createdAt: string;     // 创建时间
+    confidence: number;     // AI 置信度
+    streaming: boolean;      // 是否流式
+  };
+}
 
-#### 2. Registry（组件注册表）
+interface ViewSpec {
+  type: string;             // dashboard, list, form
+  layout?: LayoutSpec;      // 布局信息
+  components: ComponentSpec[];
+}
 
-```
-┌─────────────────────────────────────────┐
-│         ComponentRegistry                 │
-├─────────────────────────────────────────┤
-│                                         │
-│  register(type, renderFn)              │
-│       │                                 │
-│       ├──▶ 'card'     → CardRenderer   │
-│       ├──▶ 'form'     → FormRenderer   │
-│       ├──▶ 'input'    → InputRenderer  │
-│       ├──▶ 'button'   → ButtonRenderer │
-│       ├──▶ 'list'     → ListRenderer   │
-│       ├──▶ 'alert'    → AlertRenderer  │
-│       ├──▶ 'stats'    → StatsRenderer  │
-│       ├──▶ 'profile'  → ProfileRender │
-│       └──▶ 'buttonGroup' → ...         │
-│                                         │
-│  render(spec) → VNode                  │
-│       │                                 │
-│       └──▶ 递归渲染子组件              │
-│                                         │
-└─────────────────────────────────────────┘
+interface ActionSpec {
+  id: string;
+  type: 'navigation' | 'api' | 'mutation' | 'custom';
+  payload?: any;
+  nextIntent?: string;      // 执行后可能的下一个 Intent
+}
 ```
 
-#### 3. Renderer（渲染器）
+#### 2. Intent Engine（意图理解）
 
-```
-┌─────────────────────────────────────────┐
-│              Renderer                     │
-├─────────────────────────────────────────┤
-│                                         │
-│  createDom(vnode) → DOM               │
-│       │                                 │
-│       ├──▶ Text Node                   │
-│       ├──▶ Element                     │
-│       ├──▶ Component ──▶ createDom()   │
-│       └──▶ Fragment                    │
-│                                         │
-│  patch(parent, newVNode, oldVNode)    │
-│       │                                 │
-│       ├──▶ updateProps                │
-│       ├──▶ updateChildren            │
-│       │     ├──▶ diffChildrenKeyed()   │
-│       │     └──▶ diffChildren()       │
-│       └──▶ applyPatches()             │
-│                                         │
-│  hydrate(dom, vnode)                  │
-│       │                                 │
-│       └──▶ SSR 复用已有 DOM            │
-│                                         │
-└─────────────────────────────────────────┘
+```typescript
+interface Intent {
+  type: string;
+  confidence: number;
+  entities: Record<string, any>;
+  raw?: string;
+}
+
+// 注册 Intent 处理器
+intentEngine.register('show_dashboard', async (intent, context) => {
+  // AI 理解意图，返回 Spec
+  const spec = await ai.understand(intent);
+  return { spec };
+});
+
+// 处理 Intent
+const result = await intentEngine.process(intent, context);
 ```
 
-#### 4. Signal（响应式系统）
+#### 3. State Store（Memento 模式）
 
-```
-┌─────────────────────────────────────────┐
-│            Signal (响应式)                │
-├─────────────────────────────────────────┤
-│                                         │
-│  createSignal(initial)                  │
-│       │                                 │
-│       └──▶ [getter, setter]           │
-│                                         │
-│  Signal.get()                          │
-│       │                                 │
-│       └──▶ 收集当前订阅者              │
-│                                         │
-│  Signal.set(newValue)                  │
-│       │                                 │
-│       └──▶ 通知所有订阅者             │
-│             └──▶ batch() 批量更新       │
-│                                         │
-│  createEffect(fn)                      │
-│       │                                 │
-│       └──▶ 自动追踪依赖               │
-│             └──▶ WeakMap 防止内存泄漏   │
-│                                         │
-└─────────────────────────────────────────┘
+```typescript
+// 快照保存
+const snapshotId = app.saveSnapshot('before_action');
+
+// 状态恢复
+app.restore(snapshotId);
+
+// 撤销
+app.undo();
+
+// 状态订阅
+app.onStateChange((spec) => {
+  console.log('State changed:', spec);
+});
+
+// 获取历史
+const history = app.getHistory();
 ```
 
-#### 5. Diff 算法
+#### 4. Render Orchestrator（双路径渲染）
 
 ```
-┌─────────────────────────────────────────┐
-│         O(n) Keyed Diff                │
-├─────────────────────────────────────────┤
-│                                         │
-│  diffChildrenKeyed(new, old)           │
-│       │                                 │
-│       ├──▶ 按 key 建立 Map             │
-│       │     ├──▶ newKeyed: Map        │
-│       │     └──▶ oldKeyed: Map        │
-│       │                                 │
-│       ├──▶ 第一遍：顺序扫描            │
-│       │     ├──▶ 新增 → INSERT        │
-│       │     ├──▶ 匹配 → 递归 diff     │
-│       │     └──▶ 乱序 → MOVE          │
-│       │                                 │
-│       └──▶ 第二遍：删除检测            │
-│             └──▶ 剩余旧节点 → REMOVE   │
-│                                         │
-│  PatchType: REPLACE | REMOVE | INSERT │
-│              UPDATE | MOVE | TEXT       │
-│                                         │
-└─────────────────────────────────────────┘
-```
+路径 1: 标准路径（复杂界面、跨平台）
+  Intent → Spec → Rendering Runtime → UI
 
-#### 6. VNode 结构
-
-```
-┌─────────────────────────────────────────┐
-│              VNode                         │
-├─────────────────────────────────────────┤
-│                                         │
-│  interface VNode {                      │
-│    type: string | Component            │
-│    props: VNodeProps                  │
-│    children: (VNode | string)[]       │
-│    key?: string | number               │
-│    flags: VNodeFlags                   │
-│    patchFlag?: PatchFlags  // 优化    │
-│  }                                     │
-│                                         │
-│  enum VNodeFlags {                    │
-│    Element = 1,                       │
-│    Text = 2,                          │
-│    Component = 4,                     │
-│    Fragment = 8                       │
-│  }                                     │
-│                                         │
-│  enum PatchFlags {                    │
-│    TEXT = 1,    // 仅文本变化         │
-│    CLASS = 2,   // 仅 class 变化      │
-│    STYLE = 4,   // 仅 style 变化      │
-│    PROPS = 8,   // 其他 props 变化   │
-│    FULL = 16    // 完整 diff          │
-│  }                                     │
-│                                         │
-└─────────────────────────────────────────┘
+路径 2: 快速路径（实时交互、流式输出）
+  Intent → Render Orchestrator → UI
 ```
 
 ---
 
 ## AI Native 特性
 
-### 1. Spec 驱动渲染
+### 1. Intent 驱动的 UI
 
-AI 返回标准化 JSON，自动映射到组件：
+AI 理解用户意图，动态生成界面：
 
-```json
-{
-  "type": "form",
-  "children": [
-    { "type": "input", "label": "用户名", "placeholder": "请输入" },
-    { "type": "input", "type": "password", "label": "密码" },
-    { "type": "button", "label": "登录", "variant": "primary" }
-  ]
-}
+```javascript
+// 用户说"显示销售仪表盘"
+app.processIntent({
+  type: 'show_dashboard',
+  confidence: 0.95,
+  entities: { metric: 'sales', period: 'monthly' }
+});
+
+// AI 返回对应的 Spec，自动渲染
 ```
 
-渲染结果：
+### 2. 状态历史与回溯
 
-```
-┌─────────────────────────────────┐
-│  ┌───────────────────────────┐  │
-│  │ 用户名                   │  │
-│  │ [________________]        │  │
-│  └───────────────────────────┘  │
-│  ┌───────────────────────────┐  │
-│  │ 密码                     │  │
-│  │ [________________]        │  │
-│  └───────────────────────────┘  │
-│        [登录]                    │
-└─────────────────────────────────┘
+Memento Pattern 支持完整的操作历史：
+
+```javascript
+// 每个操作自动保存快照
+app.saveSnapshot();
+
+// 查看历史
+const history = app.getHistory();
+history.forEach(s => console.log(s.meta.createdAt));
+
+// 恢复到任意历史点
+app.restore(history[0].id);
+
+// 撤销
+app.undo();
 ```
 
-### 2. 流式渲染
+### 3. 流式渲染
 
 实时显示 AI 生成过程：
 
 ```javascript
 const stream = createAIStream(config);
 
-// 状态
-interface AIStreamState {
-  isGenerating: boolean;   // 是否正在生成
-  progress: number;       // 进度 0-100
-  currentSpec: Spec;      // 当前解析的 Spec
-  history: Spec[];        // 历史记录
-  error: string | null;  // 错误信息
-}
-
-// 监听
 stream.onUpdate(state => {
   progressBar.value = state.progress;
   if (state.currentSpec) {
-    render(state.currentSpec); // 增量渲染
+    app.update(state.currentSpec);
   }
 });
 
-// 生成
-for await (const state of stream.generate('创建一个仪表盘')) {
-  // 实时看到 AI 生成 UI 的过程
+for await (const state of stream.generate('创建仪表盘')) {
+  // 实时看到 UI 生成过程
 }
 ```
 
-### 3. Intent 路由
-
-AI UI 交互自动触发 AI 理解：
+### 4. Action 执行与链式 Intent
 
 ```javascript
-const router = createIntentRouter();
-
-// 注册 Intent 处理器
-router.register('onSubmit', async (data) => {
-  // 返回 AI 对这个提交的理解
-  return await ai.understand('form_submit', data);
-});
-
-router.register('onClick', async ({ id, action }) => {
-  return await ai.understand('click', { id, action });
-});
-
-// 使用
-const spec = await ai.generate('创建一个有表单的页面');
-render(spec);
-
-// 之后，AI 生成的 UI 会自动与 router 关联
-document.querySelector('button').onclick = () => {
-  router.handle('onClick', { id: 'submit-btn', action: 'login' });
-};
-```
-
-### 4. 热更新
-
-```javascript
-const app = new AIRender({ container: '#app', initialSpec });
-
-// 全量更新
-app.update(newSpecs);
-
-// 或获取当前 Spec 进行修改
-const current = app.getSpec();
-app.update(modifiedSpec);
-```
-
-### 5. 自定义组件
-
-```javascript
-// 注册自定义组件
-app.register('myComponent', (spec, render) => {
-  return h('div', { class: 'my-component' },
-    h('span', null, spec.text),
-    ...spec.children.map(c => render(c))
-  );
-});
-
-// AI 可以使用这个组件
+// Spec 中定义动作
 const spec = {
-  type: 'myComponent',
-  text: 'Hello',
-  children: [...]
-};
-```
-
----
-
-## 安全建议
-
-### 问题：前端暴露 API Key 不安全
-
-```
-❌ 错误做法：
-  前端直接调用 AI API，API Key 暴露在浏览器中
-  ↓
-  用户可以通过 F12 看到 API Key
-  ↓
-  任何人可以刷你的 API 额度
-```
-
-### 正确架构：后端代理
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   前端      │     │   后端      │     │   AI API    │
-│  (AIRender) │     │  (API Proxy) │     │  (LLM)     │
-│             │     │             │     │             │
-│ API Key: ✗ │     │ API Key: ✓  │     │             │
-│  只渲染     │◀───▶│  安全转发   │───▶│  AI 返回    │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
-
-### 实现建议
-
-#### 1. 后端代理（推荐）
-
-```javascript
-// 后端 - 安全转发 AI 请求
-app.post('/api/generate', async (req, res) => {
-  const { prompt } = req.body;
-
-  // API Key 只在服务器端使用
-  const response = await callAI('openai', {
-    apiKey: process.env.OPENAI_API_KEY
-  }, prompt);
-
-  res.json({ spec: parseAIResponse(response.content) });
-});
-```
-
-#### 2. Vite 代理开发
-
-```javascript
-// vite.config.js
-export default {
-  server: {
-    proxy: {
-      '/api/ai': {
-        target: 'https://api.openai.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/ai/, '/v1/chat/completions'),
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-        }
-      }
+  actions: [
+    {
+      id: 'navigate_settings',
+      type: 'navigation',
+      nextIntent: 'show_settings'
     }
-  }
+  ]
 };
+
+// 执行动作，自动触发下一个 Intent
+await app.executeAction(spec.actions[0]);
 ```
 
-#### 3. 环境变量
+### 5. 平台适配
 
-```bash
-# .env (不要提交到 Git)
-OPENAI_API_KEY=sk-xxx
-MINIMAX_API_KEY=xxx
-```
+统一的平台抽象接口：
 
 ```javascript
-// 使用时
-const response = await fetch('/api/ai', {
-  headers: {
-    'Authorization': `Bearer ${import.meta.env.VITE_API_KEY}`
-  }
-});
+import { createPlatformAdapter } from 'ai-render-runtime';
+
+// 浏览器
+const browserAdapter = createPlatformAdapter('#app', 'browser');
+
+// Tauri (未来)
+const tauriAdapter = createPlatformAdapter('#app', 'tauri');
 ```
-
-### 最佳实践
-
-| 做法 | 说明 |
-|------|------|
-| API Key 后端存储 | 永远不要把 Key 放在前端代码 |
-| 限制 API Key 权限 | 只给需要的 API 权限 |
-| 请求频率限制 | 防止滥用 |
-| 使用代理 | 隐藏真实 AI API 地址 |
-| 监控异常 | 发现异常调用及时告警 |
 
 ---
 
 ## API 参考
 
-### AI Native 核心
-
-#### AIRender
+### AIRender
 
 ```typescript
-// 创建实例
 const app = new AIRender({
   container: '#app',
-  initialSpec: specs  // 可选
+  initialSpec: specs,
+  enableHistory: true  // 默认开启
 });
 
-// 渲染 Spec
-app.render(specs);
-app.update(specs);  // 热更新
+// 渲染
+app.render(spec);
+app.update(spec);  // 热更新
 
-// 注册自定义组件
-app.register('myComponent', (spec, render) => VNode);
+// Intent 处理
+app.processIntent(intent);  // → Promise<Spec>
+
+// Action 执行
+app.executeAction(action);  // → Promise<boolean>
+
+// 状态历史
+app.saveSnapshot(label?);   // → snapshotId
+app.restore(snapshotId);    // → boolean
+app.undo();                 // → boolean
+app.getHistory();           // → Snapshot[]
+app.onStateChange(callback); // → unsubscribe fn
 
 // 获取当前 Spec
 app.getSpec();
@@ -719,229 +416,146 @@ app.getSpec();
 app.destroy();
 ```
 
-#### createAIGen
+### IntentEngine
 
 ```typescript
-// 创建 AI 生成器（需要后端代理支持 CORS）
-const gen = createAIGen({
-  container: '#app',
-  apiKey: 'your-key',
-  provider: 'minimax',
-  model: 'M2-her'
+const engine = new IntentEngine();
+
+// 注册 Intent 处理器
+engine.register('show_dashboard', async (intent, context) => {
+  return { spec: generatedSpec };
 });
 
-// 生成
-await gen.generate('创建一个登录表单');
+// 设置默认处理器
+engine.setDefaultHandler(async (intent, context) => {
+  return { spec: await ai.understand(intent) };
+});
+
+// 处理
+const result = await engine.process(intent, context);
+
+// 查询
+engine.getRegisteredIntents();
 ```
 
-#### createAIStream
+### ActionEngine
 
 ```typescript
-// 创建流式生成器
+const actionEngine = new ActionEngine();
+
+// 注册动作处理器
+actionEngine.register('api', async (payload) => {
+  return await fetch(payload.endpoint, payload.options);
+});
+
+// 执行
+const result = await actionEngine.execute({
+  id: 'fetch_data',
+  type: 'api',
+  payload: { endpoint: '/api/data' }
+});
+
+// 批量执行
+const results = await actionEngine.executeBatch(actions);
+```
+
+### StateStore
+
+```typescript
+const store = new StateStore(maxHistory = 50);
+
+store.getState();           // → Spec | null
+store.setState(spec);
+store.saveSnapshot(label?);
+store.restore(snapshotId);
+store.getSnapshot(id);
+store.getHistory();
+store.undo();
+store.subscribe(callback);  // → unsubscribe
+store.clear();
+```
+
+### RenderOrchestrator
+
+```typescript
+const orch = new RenderOrchestrator(renderer);
+
+// 设置渲染模式
+orch.setMode('standard');  // 或 'fast'
+
+// 标准路径：渲染 Spec
+orch.renderSpec(spec);
+
+// 快速路径：直接补丁
+orch.patch({ type: 'style', path: ['color'], value: 'red' });
+
+// 流式更新
+orch.stream({ view: { type: 'partial' } });
+
+// 切换路径
+orch.useStandardPath(spec);
+```
+
+### PlatformAdapter
+
+```typescript
+interface PlatformAdapter {
+  platform: 'browser' | 'tauri' | 'node' | 'mobile';
+  render(spec: Spec): void;
+  destroy(): void;
+  readClipboard(): Promise<string>;
+  writeClipboard(text: Promise<void>);
+  showNotification(title: string, body: string): Promise<void>;
+  onReady(callback: () => void): void;
+  onDestroy(callback: () => void): void;
+}
+
+// 创建适配器
+const adapter = createPlatformAdapter(container, 'browser');
+```
+
+### createAIStream
+
+```typescript
 const stream = createAIStream({
   apiKey: 'your-key',
   apiUrl: '...',
   model: '...'
 });
 
-// 监听状态
 stream.onUpdate(state => {
-  console.log(state.progress, state.currentSpec);
+  // state.isGenerating, state.progress, state.currentSpec
 });
 
-// 流式生成
 for await (const state of stream.generate('创建仪表盘')) {
-  render(state.currentSpec);
-});
-
-// 非流式
-const spec = await stream.generateOnce('创建表单');
-
-// 状态管理
-stream.getState();       // 当前状态
-stream.getHistory();     // 历史
-stream.clearHistory();    // 清空
-```
-
-#### IntentRouter
-
-```typescript
-const router = createIntentRouter();
-
-// 注册
-router.register('onSubmit', async (data) => {
-  return await ai.understand('submit', data);
-});
-
-// 处理
-const result = await router.handle('onSubmit', formData);
-
-// 查询
-router.getIntents();  // ['onSubmit', ...]
-```
-
-#### registry
-
-```typescript
-// 直接渲染
-const vnode = registry.render(spec);
-
-// 注册组件
-registry.register('myComponent', (spec, render) => VNode);
-
-// 获取
-const renderer = registry.get('button');
-```
-
-### 响应式
-
-#### createSignal
-
-```typescript
-const [count, setCount] = createSignal(0);
-count();        // 读取
-setCount(1);   // 设置
-setCount(c => c + 1);  // 更新
-```
-
-#### reactive
-
-```typescript
-const state = reactive({
-  name: 'AI',
-  items: []
-});
-
-state.name;           // 自动追踪
-state.items.push(1);  // 深层响应
-```
-
-#### computed
-
-```typescript
-const doubled = computed(() => count() * 2);
-```
-
-#### watch / watchEffect
-
-```typescript
-watch(() => count(), (newVal, oldVal) => {
-  console.log(`${oldVal} → ${newVal}`);
-});
-
-watchEffect(() => {
-  console.log('Count changed:', count());
-});
-```
-
-### 组件
-
-#### memo / useMemo / useCallback
-
-```typescript
-const Memoized = memo(Component, (prev, next) => {
-  return prev.id === next.id;  // 自定义比较
-});
-
-const value = useMemo(() => expensive(), [dep]);
-const fn = useCallback(() => doSomething(a), [a]);
-```
-
-#### ref / useRef
-
-```typescript
-const ref = useRef<HTMLInputElement>();
-ref.current.focus();
-```
-
-#### forwardRef
-
-```typescript
-const ForwardedInput = forwardRef((props, ref) => {
-  return h('input', { ref });
-});
-```
-
-### 生命周期
-
-```typescript
-onMounted(() => { /* DOM 已挂载 */ });
-onUpdated(() => { /* DOM 已更新 */ });
-onUnmounted(() => { /* DOM 即将卸载 */ });
-onBeforeMount(() => { /* 挂载前 */ });
-onBeforeUpdate(() => { /* 更新前 */ });
-onBeforeUnmount(() => { /* 卸载前 */ });
-```
-
-### 上下文
-
-```typescript
-const ThemeContext = createContext('light');
-
-function ThemedButton() {
-  const theme = useContext(ThemeContext);
-  return h('button', { class: theme }, 'Click');
+  app.update(state.currentSpec);
 }
 
-// Provide
-provide(ThemeContext, 'dark');
-
-// Inject
-const theme = inject(ThemeContext);
+const spec = await stream.generateOnce('创建表单');
+stream.clearHistory();
 ```
 
 ---
 
-## 核心概念
+## 安全建议
 
-### Spec
+### 正确架构：后端代理
 
-AI 生成的标准化 UI 描述：
-
-```typescript
-interface Spec {
-  type: string;           // 组件类型
-  [key: string]: any;    // 组件属性
-}
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   前端      │     │   后端      │     │   AI API    │
+│  (AIRender) │◀───│  (API Proxy) │───▶│  (LLM)     │
+│             │     │             │     │             │
+│ API Key: ✗ │     │ API Key: ✓  │     │ AI 返回    │
+└─────────────┘     └─────────────┘     └─────────────┘
 ```
 
-### VNode
-
-虚拟节点，描述 UI 的纯数据结构：
-
-```typescript
-interface VNode {
-  type: string | Component;
-  props: Record<string, any>;
-  children: (VNode | string)[];
-  key?: string | number;
-  flags: VNodeFlags;
-}
-```
-
-### Signal
-
-响应式数据容器，值变化时自动通知订阅者：
-
-```typescript
-const [value, setValue] = createSignal(initial);
-// 或
-const signal = new Signal(initial);
-signal.get();   // 读取
-signal.set(1);  // 写入
-```
-
-### Registry
-
-组件注册表，将 Spec type 映射到渲染函数：
-
-```typescript
-registry.register('card', (spec, render) => {
-  return h('div', { class: 'card' },
-    spec.children?.map(c => render(c))
-  );
-});
-```
+| 做法 | 说明 |
+|------|------|
+| API Key 后端存储 | 永远不要把 Key 放在前端代码 |
+| 限制 API Key 权限 | 只给需要的 API 权限 |
+| 请求频率限制 | 防止滥用 |
+| 使用代理 | 隐藏真实 AI API 地址 |
 
 ---
 
@@ -959,7 +573,3 @@ npm run build
 ## 许可证
 
 MIT
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！

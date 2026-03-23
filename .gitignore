@@ -12,7 +12,7 @@ build/
 components/
 
 # Docs
-docs/
+!docs/superpowers/specs/
 
 # IDE
 .idea/

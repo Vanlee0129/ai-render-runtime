@@ -2,14 +2,21 @@
  * AI Render Runtime
  * 下一代 AI 驱动的声明式 UI 渲染引擎
  */
-import { Signal, createSignal, createArraySignal, createEffect, batch, track } from './signal';
-import { h, t, Fragment, createComponent, Component, ComponentProps } from './vdom';
+import { Signal, createSignal, createArraySignal, createEffect, batch, track, createWatch, watch, WatchOptions, WatchStopHandle, createLazyComputed, ComputedSignal } from './signal';
+import { h, t, Fragment, createComponent, Component, ComponentProps, enableStaticHoisting, disableStaticHoisting } from './vdom';
 import { diff, batchDiff, reconcile, Patch, PatchType } from './diff';
-import { jsx, createElement } from './jsx';
+import { jsx } from './jsx';
 import { registry, ComponentSpec, RenderFn } from './registry';
 import { Renderer, createRenderer, mount } from './renderer';
-import { AIProvider } from './ai-adapter';
+import { SYSTEM_PROMPT, AIConfig, AIResponse } from './prompts';
+import { AIProvider, callAI, parseAIResponse } from './ai-adapter';
 import { scheduleCallback, runWithPriority, getCurrentPriority, Priority, ImmediatePriority, UserBlockingPriority, NormalPriority, LowPriority, IdlePriority } from './scheduler';
+import { StateStore } from './state-store';
+import { IntentEngine, Intent } from './intent-engine';
+import { ActionEngine } from './action-engine';
+import { RenderOrchestrator } from './render-orchestrator';
+import { PlatformAdapter } from './platform-adapter';
+import { Spec, ActionSpec } from './spec-contract';
 export interface AIGenOptions {
     container: Element | string;
     apiKey: string;
@@ -22,15 +29,28 @@ export interface AIGenOptions {
 export declare class AIRender {
     renderer: Renderer;
     container: Element;
-    currentSpec: any[];
+    currentSpec: Spec | null;
+    stateStore: StateStore;
+    intentEngine: IntentEngine;
+    actionEngine: ActionEngine;
+    orchestrator: RenderOrchestrator;
+    adapter: PlatformAdapter;
     constructor(options: {
         container: Element | string;
         initialSpec?: any | any[];
+        enableHistory?: boolean;
     });
-    render(specs: any | any[]): void;
-    update(specs: any | any[]): void;
+    processIntent(intent: Intent): Promise<Spec | null>;
+    executeAction(action: ActionSpec): Promise<boolean>;
+    saveSnapshot(label?: string): string;
+    restore(snapshotId: string): boolean;
+    undo(): boolean;
+    getHistory(): any[];
+    onStateChange(callback: (spec: any) => void): () => void;
+    render(spec: any): void;
+    update(spec: any): void;
     register(name: string, fn: (spec: any, render: (spec: any) => any) => any): void;
-    getSpec(): any[];
+    getSpec(): Spec | null;
     destroy(): void;
 }
 export declare class AIGenRender {
@@ -40,19 +60,25 @@ export declare class AIGenRender {
     generate(userPrompt: string): Promise<void>;
     render(spec: any): void;
 }
-export { Signal, createSignal, createArraySignal, createEffect, batch, track };
-export { h, t, Fragment, createComponent, jsx, createElement };
-export { diff, batchDiff, reconcile, Patch, PatchType };
 export { registry, ComponentSpec, RenderFn };
-export { SYSTEM_PROMPT, AIConfig, AIResponse } from './prompts';
-export { AIProvider, callAI, parseAIResponse } from './ai-adapter';
+export { SYSTEM_PROMPT, AIConfig, AIResponse };
+export { AIProvider, callAI, parseAIResponse };
+export { Signal, createSignal, createArraySignal, createEffect, batch, track, createWatch, watch, WatchOptions, WatchStopHandle, createLazyComputed, ComputedSignal };
+export { h, t, Fragment, createComponent, jsx, enableStaticHoisting, disableStaticHoisting };
+export { Component, ComponentProps };
+export { diff, batchDiff, reconcile, Patch, PatchType };
 export { Renderer, createRenderer, mount };
 export { scheduleCallback, runWithPriority, getCurrentPriority, Priority, ImmediatePriority, UserBlockingPriority, NormalPriority, LowPriority, IdlePriority };
 export { memo, useMemo, useCallback, isMemoized } from './memo';
-export { createContext, useContext, pushContext, popContext, Context } from './context';
-export { ErrorBoundary, componentDidCatch, ErrorInfo, ErrorBoundaryState } from './error-boundary';
 export { ref, useRef, forwardRef, Ref, RefCallback } from './refs';
-export type { Component, ComponentProps };
+export { onMounted, onUpdated, onUnmounted, onBeforeMount, onBeforeUpdate, onBeforeUnmount } from './lifecycle';
+export { KeepAlive, getKeepAliveCache, clearKeepAliveCache } from './keep-alive';
+export { defineAsyncComponent, markAsyncComponent, isAsyncComponent, getSuspenseState } from './suspense';
+export { ErrorBoundary, componentDidCatch, ErrorInfo, ErrorBoundaryState } from './error-boundary';
+export { createContext, useContext, pushContext, popContext, Context, provide, inject, InjectionKey, createInjectionKey } from './context';
+export { reactive, ref as reactiveRef, computed, watchEffect, isRef, watchProxy } from './reactive';
+export { createAIStream, createIntentRouter, AIStream, IntentRouter, AIStreamState, AIStreamConfig } from './ai-stream';
+export { Spec, SpecMeta, ViewSpec, LayoutSpec, ActionSpec, ActionType, createSpec, SPEC_VERSION } from './spec-contract';
 export declare function createAIRender(container: Element | string, initialSpec?: any | any[]): AIRender;
 export declare function createAIGen(options: AIGenOptions): AIGenRender;
 export declare function render(specs: any | any[], container: Element | string): AIRender;

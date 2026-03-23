@@ -3,6 +3,16 @@
  * 轻量级组件注册表
  */
 import { h } from './vdom';
+import { createSpec } from './spec-contract';
+// 旧格式兼容：如果传入的是简单 ComponentSpec，自动包装为 Spec
+export function wrapToSpec(spec, intent = 'unknown') {
+    const specs = Array.isArray(spec) ? spec : [spec];
+    const view = {
+        type: 'custom',
+        components: specs,
+    };
+    return createSpec(intent, view);
+}
 // 组件渲染器注册表
 class ComponentRegistry {
     constructor() {

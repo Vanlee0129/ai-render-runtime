@@ -44,7 +44,41 @@ export declare function createArraySignal<T>(initialValue: T[]): {
     remove: (index: number) => T;
 };
 /**
+ * createLazyComputed - Vue 3 style lazy computed
+ * Only recomputes when first accessed and only updates on access after dependency changes
+ */
+export declare function createLazyComputed<T>(compute: () => T): () => T;
+/**
+ * ComputedSignal - A computed signal that caches its value
+ * Similar to Vue 3's computed
+ */
+export declare class ComputedSignal<T> {
+    private value;
+    private computeFn;
+    private subscribers;
+    private dirty;
+    private trackingSignal;
+    constructor(fn: () => T);
+    get(): T;
+    private markDirty;
+    private notify;
+}
+/**
  * 导出类型
  */
 export type { Subscriber, Effect };
+export type WatchOptions = {
+    immediate?: boolean;
+    flush?: 'pre' | 'post' | 'sync';
+    onCleanup?: (fn: () => void) => void;
+};
+export type WatchStopHandle = () => void;
+/**
+ * createWatch - Enhanced watch with options (Vue 3 style)
+ */
+export declare function createWatch<T>(source: () => T, callback: (newValue: T, oldValue: T | undefined) => void, options?: WatchOptions): WatchStopHandle;
+/**
+ * watch - Shorthand for createWatch
+ */
+export declare function watch<T>(source: () => T, callback: (newValue: T, oldValue: T | undefined) => void, options?: WatchOptions): WatchStopHandle;
 //# sourceMappingURL=signal.d.ts.map

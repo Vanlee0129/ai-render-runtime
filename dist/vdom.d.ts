@@ -3,6 +3,8 @@
  * 轻量级虚拟 DOM 实现
  */
 import { Ref, RefCallback } from './refs';
+export declare function enableStaticHoisting(): void;
+export declare function disableStaticHoisting(): void;
 /**
  * 虚拟节点类型
  */
@@ -47,6 +49,7 @@ export interface VNode {
     children: (VNode | string)[];
     key?: string | number;
     flags: VNodeFlags;
+    patchFlag?: PatchFlags;
 }
 /**
  * 虚拟节点标志
@@ -56,6 +59,16 @@ export declare enum VNodeFlags {
     Text = 2,
     Component = 4,
     Fragment = 8
+}
+/**
+ * PatchFlags - 精细化更新标志
+ */
+export declare enum PatchFlags {
+    TEXT = 1,// 文本内容变化
+    CLASS = 2,// class 变化
+    STYLE = 4,// style 变化
+    PROPS = 8,// 其他 props 变化 (非 class/style)
+    FULL = 16
 }
 /**
  * 创建元素 VNode

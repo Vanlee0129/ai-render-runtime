@@ -2,6 +2,29 @@
  * AI Render Runtime - Virtual DOM
  * 轻量级虚拟 DOM 实现
  */
+import { getCachedVNode, clearVNodeCache } from './vnode-cache';
+let isStaticHoistingEnabled = false;
+export function enableStaticHoisting() {
+    isStaticHoistingEnabled = true;
+}
+export function disableStaticHoisting() {
+    isStaticHoistingEnabled = false;
+    clearVNodeCache();
+}
+function isStaticElement(tag, props) {
+    // Don't cache if props contain functions (handlers) or refs
+    for (const key in props) {
+        if (key.startsWith('on') && typeof props[key] === 'function')
+            return false;
+        if (key === 'ref')
+            return false;
+        if (key === 'key')
+            continue;
+        if (typeof props[key] === 'function')
+            return false;
+    }
+    return true;
+}
 /**
  * 虚拟节点标志
  */
@@ -13,15 +36,32 @@ export var VNodeFlags;
     VNodeFlags[VNodeFlags["Fragment"] = 8] = "Fragment";
 })(VNodeFlags || (VNodeFlags = {}));
 /**
+ * PatchFlags - 精细化更新标志
+ */
+export var PatchFlags;
+(function (PatchFlags) {
+    PatchFlags[PatchFlags["TEXT"] = 1] = "TEXT";
+    PatchFlags[PatchFlags["CLASS"] = 2] = "CLASS";
+    PatchFlags[PatchFlags["STYLE"] = 4] = "STYLE";
+    PatchFlags[PatchFlags["PROPS"] = 8] = "PROPS";
+    PatchFlags[PatchFlags["FULL"] = 16] = "FULL";
+})(PatchFlags || (PatchFlags = {}));
+/**
  * 创建元素 VNode
  */
 export function h(tag, props = {}, ...children) {
+    const { key, patchFlag, ...rest } = props;
+    // Check if this is a static element suitable for caching
+    if (isStaticHoistingEnabled && isStaticElement(tag, rest)) {
+        return getCachedVNode(tag, rest, children.flat());
+    }
     return {
         type: tag,
-        props,
+        props: rest,
         children: children.flat(),
-        key: props.key,
-        flags: VNodeFlags.Element
+        key,
+        flags: VNodeFlags.Element,
+        patchFlag
     };
 }
 /**
