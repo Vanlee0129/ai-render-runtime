@@ -12,6 +12,7 @@
 - [架构设计](#架构设计)
 - [AI Native 特性](#ai-native-特性)
 - [API 参考](#api-参考)
+- [安全建议](#安全建议)
 - [核心概念](#核心概念)
 
 ---
@@ -77,72 +78,189 @@ npm run build
 
 ### 方式 1: AI 驱动渲染（核心场景）
 
+**关键**：AI 调用应在后端进行，前端只负责渲染。以下是正确的集成模式：
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   前端      │     │   后端      │     │   AI API    │
+│  (AIRender) │◀───│  (API Proxy) │───▶│  (LLM)     │
+└─────────────┘     └─────────────┘     └─────────────┘
+     渲染              安全转发           生成 UI Spec
+```
+
+**前端代码（只负责渲染）**：
+
 ```javascript
 import { AIRender } from 'ai-render-runtime';
 
-// AI 生成的结构化数据
-const specs = [
-  {
-    type: 'card',
-    title: '销售报表',
-    children: [
-      { type: 'stats', label: '今日收入', value: '¥12,345' },
-      { type: 'stats', label: '订单数', value: '89' }
-    ]
-  }
-];
-
-// 直接渲染 AI 输出
+// 只负责渲染 AI 返回的 Spec
 const app = new AIRender({
   container: '#app',
-  initialSpec: specs
+  initialSpec: null  // 初始为空，等待后端返回
 });
 
-// AI 返回新数据时，热更新 UI
-app.update(newSpecsFromAI);
+// 通过后端 API 获取 AI 生成的 Spec
+async function fetchAISpec(prompt) {
+  // 注意：API 调用在后端，前端只请求自己的服务
+  const response = await fetch('/api/generate-ui', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt })
+  });
+  return response.json();  // 返回 { spec: {...} }
+}
+
+// 使用
+const { spec } = await fetchAISpec('创建一个登录表单');
+app.update(spec);
 ```
 
-### 方式 2: 流式生成
+**后端代码示例（Node.js）**：
 
 ```javascript
-import { createAIStream } from 'ai-render-runtime';
+// server.js - 安全的 API 代理
+const express = require('express');
+const { callAI } = require('ai-render-runtime');
 
-const stream = createAIStream({ apiKey: 'your-key' });
+const app = express();
+app.use(express.json());
 
-// 实时监听 AI 生成状态
-stream.onUpdate(state => {
-  console.log(`生成进度: ${state.progress}%`);
-  if (state.currentSpec) {
-    render(state.currentSpec); // 实时渲染
+app.post('/api/generate-ui', async (req, res) => {
+  const { prompt } = req.body;
+
+  try {
+    // API Key 只在后端使用，绝不暴露给前端
+    const response = await callAI('openai', {
+      apiKey: process.env.OPENAI_API_KEY,  // 环境变量
+      model: 'gpt-4'
+    }, prompt);
+
+    const spec = JSON.parse(response.content);
+    res.json({ spec });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 启动流式生成
-for await (const state of stream.generate('创建一个登录表单')) {
-  // 增量渲染 AI 输出
-}
+app.listen(3000);
 ```
 
-### 方式 3: Intent 路由
+### 方式 2: 使用内置 AI 生成器（仅开发/演示）
+
+如果你的 AI API 支持 CORS 或你使用代理，可以直接使用内置生成器：
 
 ```javascript
-import { createIntentRouter } from 'ai-render-runtime';
+import { createAIGen } from 'ai-render-runtime';
 
+const gen = createAIGen({
+  container: '#app',
+  apiKey: 'your-api-key',  // 仅用于演示，不推荐生产环境
+  provider: 'openai',
+  apiUrl: '/api/proxy',  // 指向你的后端代理
+  model: 'gpt-4'
+});
+
+// 生成并渲染
+await gen.generate('创建一个仪表盘');
+```
+
+### 方式 3: Intent 路由 + AI 理解
+
+**关键**：Intent 路由让你的 AI UI 具备交互能力：
+
+```
+用户点击按钮 → Intent 触发 → 后端 AI 理解意图 → 返回新 Spec → 热更新 UI
+```
+
+```javascript
+import { createIntentRouter, AIRender } from 'ai-render-runtime';
+
+// 1. 创建渲染器
+const app = new AIRender({ container: '#app' });
+
+// 2. 创建 Intent 路由
 const router = createIntentRouter();
 
-// 注册交互处理器
-router.register('onSubmit', async (data) => {
-  // AI 理解提交的数据
-  return await ai.understand('用户提交了登录表单', data);
+// 3. 注册 Intent 处理器（指向你的后端 AI 服务）
+router.register('onClick', async (payload) => {
+  // 发送到后端，后端调用 AI 理解意图
+  const response = await fetch('/api/ai-understand', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'click',
+      element: payload.id,
+      context: payload
+    })
+  });
+  return response.json();  // 返回 { spec: {...} } 或 { command: '...' }
 });
 
-router.register('onClick', async (buttonId) => {
-  return await ai.understand(`用户点击了 ${buttonId} 按钮`);
+router.register('onSubmit', async (payload) => {
+  const response = await fetch('/api/ai-understand', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'submit',
+      formData: payload,
+      context: 'login_form'
+    })
+  });
+  return response.json();
 });
 
-// 绑定到 AI 生成的 UI
-button.addEventListener('click', () => {
-  router.handle('onClick', 'login-btn');
+// 4. 初始渲染（后端返回第一个 AI UI）
+const { spec } = await fetch('/api/ai-initial');
+app.update(spec);
+
+// 5. 绑定 Intent 到 AI 生成的 UI
+// 假设 AI 返回的按钮有 data-intent="onClick" 属性
+document.addEventListener('click', async (e) => {
+  const intentElement = e.target.closest('[data-intent]');
+  if (intentElement) {
+    const intentName = intentElement.dataset.intent;
+    const payload = { id: intentElement.id, value: intentElement.value };
+
+    const result = await router.handle(intentName, payload);
+
+    // 如果返回新 Spec，热更新 UI
+    if (result && result.spec) {
+      app.update(result.spec);
+    }
+  }
+});
+```
+
+**后端 AI 理解服务**：
+
+```javascript
+// server.js - AI 理解服务
+app.post('/api/ai-understand', async (req, res) => {
+  const { action, element, context } = req.body;
+
+  // 构造提示词，让 AI 决定下一步 UI
+  const prompt = `
+    用户在 AI 生成的 UI 上执行了操作：
+    - 操作类型: ${action}
+    - 元素: ${element}
+    - 上下文: ${JSON.stringify(context)}
+
+    根据用户意图，返回下一个 UI 的 JSON Spec。
+    如果用户要填写表单，返回带输入值的表单。
+    如果用户点击了按钮，返回按钮点击后的结果 UI。
+  `;
+
+  const response = await callAI('openai', {
+    apiKey: process.env.OPENAI_API_KEY,
+    model: 'gpt-4'
+  }, prompt);
+
+  try {
+    const spec = JSON.parse(response.content);
+    res.json({ spec });
+  } catch {
+    res.status(500).json({ error: 'Failed to parse AI response' });
+  }
 });
 ```
 
@@ -174,15 +292,15 @@ button.addEventListener('click', () => {
 │  ┌─────────────────────────────────────────────┼──────────┤
 │  │                  Core Engine                │          │
 │  ├─────────────────────────────────────────────┼──────────┤
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐    │          │
-│  │  │ Signal  │  │  VDOM   │  │  Diff  │    │          │
-│  │  │(响应式) │  │(虚拟DOM) │  │(差异)  │    │          │
-│  │  └─────────┘  └─────────┘  └─────────┘    │          │
-│  │                                              │          │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐    │          │
-│  │  │Lifecycle │  │ Context │  │  Memo  │    │          │
-│  │  │(生命周期)│  │(上下文) │  │(记忆化)│    │          │
-│  │  └─────────┘  └─────────┘  └─────────┘    │          │
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐   │          │
+│  │  │ Signal  │  │  VDOM   │  │  Diff   │   │          │
+│  │  │(响应式) │  │(虚拟DOM) │  │(差异)   │   │          │
+│  │  └─────────┘  └─────────┘  └─────────┘   │          │
+│  │                                             │          │
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐   │          │
+│  │  │Lifecycle │  │ Context │  │  Memo   │   │          │
+│  │  │(生命周期)│  │(上下文) │  │(记忆化) │   │          │
+│  │  └─────────┘  └─────────┘  └─────────┘   │          │
 │  └─────────────────────────────────────────────────────────┘
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -193,20 +311,20 @@ button.addEventListener('click', () => {
 
 ```
 ┌─────────────────────────────────────────┐
-│            AI Adapter                    │
+│            AI Adapter                     │
 ├─────────────────────────────────────────┤
 │                                         │
-│  callAI(provider, config, prompt)        │
+│  callAI(provider, config, prompt)       │
 │       │                                 │
 │       ├──▶ MiniMax Adapter             │
 │       ├──▶ OpenAI Adapter              │
 │       └──▶ Anthropic Adapter            │
 │                                         │
-│  parseAIResponse(content)                │
+│  parseAIResponse(content)               │
 │       │                                 │
-│       └──▶ JSON Extractor               │
+│       └──▶ JSON Extractor              │
 │              - markdown 代码块提取       │
-│              - 括号范围提取              │
+│              - 括号范围提取             │
 │              - 容错解析                 │
 │                                         │
 └─────────────────────────────────────────┘
@@ -216,24 +334,24 @@ button.addEventListener('click', () => {
 
 ```
 ┌─────────────────────────────────────────┐
-│         ComponentRegistry                │
+│         ComponentRegistry                 │
 ├─────────────────────────────────────────┤
 │                                         │
-│  register(type, renderFn)               │
+│  register(type, renderFn)              │
 │       │                                 │
-│       ├──▶ 'card'     → CardRenderer    │
-│       ├──▶ 'form'     → FormRenderer    │
-│       ├──▶ 'input'    → InputRenderer   │
-│       ├──▶ 'button'   → ButtonRenderer  │
-│       ├──▶ 'list'     → ListRenderer    │
-│       ├──▶ 'alert'    → AlertRenderer   │
-│       ├──▶ 'stats'    → StatsRenderer   │
-│       ├──▶ 'profile'  → ProfileRenderer │
-│       └──▶ 'buttonGroup' → ...          │
+│       ├──▶ 'card'     → CardRenderer   │
+│       ├──▶ 'form'     → FormRenderer   │
+│       ├──▶ 'input'    → InputRenderer  │
+│       ├──▶ 'button'   → ButtonRenderer │
+│       ├──▶ 'list'     → ListRenderer   │
+│       ├──▶ 'alert'    → AlertRenderer  │
+│       ├──▶ 'stats'    → StatsRenderer  │
+│       ├──▶ 'profile'  → ProfileRender │
+│       └──▶ 'buttonGroup' → ...         │
 │                                         │
-│  render(spec) → VNode                   │
+│  render(spec) → VNode                  │
 │       │                                 │
-│       └──▶ 递归渲染子组件               │
+│       └──▶ 递归渲染子组件              │
 │                                         │
 └─────────────────────────────────────────┘
 ```
@@ -245,24 +363,24 @@ button.addEventListener('click', () => {
 │              Renderer                     │
 ├─────────────────────────────────────────┤
 │                                         │
-│  createDom(vnode) → DOM                │
+│  createDom(vnode) → DOM               │
 │       │                                 │
 │       ├──▶ Text Node                   │
 │       ├──▶ Element                     │
-│       ├──▶ Component ──▶ createDom()    │
+│       ├──▶ Component ──▶ createDom()   │
 │       └──▶ Fragment                    │
 │                                         │
-│  patch(parent, newVNode, oldVNode)     │
+│  patch(parent, newVNode, oldVNode)    │
 │       │                                 │
 │       ├──▶ updateProps                │
-│       ├──▶ updateChildren             │
+│       ├──▶ updateChildren            │
 │       │     ├──▶ diffChildrenKeyed()   │
-│       │     └──▶ diffChildren()        │
-│       └──▶ applyPatches()              │
+│       │     └──▶ diffChildren()       │
+│       └──▶ applyPatches()             │
 │                                         │
-│  hydrate(dom, vnode)                   │
+│  hydrate(dom, vnode)                  │
 │       │                                 │
-│       └──▶ SSR 复用已有 DOM             │
+│       └──▶ SSR 复用已有 DOM            │
 │                                         │
 └─────────────────────────────────────────┘
 ```
@@ -276,21 +394,21 @@ button.addEventListener('click', () => {
 │                                         │
 │  createSignal(initial)                  │
 │       │                                 │
-│       └──▶ [getter, setter]            │
+│       └──▶ [getter, setter]           │
 │                                         │
-│  Signal.get()                           │
+│  Signal.get()                          │
 │       │                                 │
-│       └──▶ 收集当前订阅者               │
+│       └──▶ 收集当前订阅者              │
 │                                         │
-│  Signal.set(newValue)                   │
+│  Signal.set(newValue)                  │
 │       │                                 │
-│       └──▶ 通知所有订阅者               │
-│             └──▶ batch() 批量更新        │
+│       └──▶ 通知所有订阅者             │
+│             └──▶ batch() 批量更新       │
 │                                         │
-│  createEffect(fn)                       │
+│  createEffect(fn)                      │
 │       │                                 │
-│       └──▶ 自动追踪依赖                 │
-│             └──▶ WeakMap 防止内存泄漏    │
+│       └──▶ 自动追踪依赖               │
+│             └──▶ WeakMap 防止内存泄漏   │
 │                                         │
 └─────────────────────────────────────────┘
 ```
@@ -299,24 +417,24 @@ button.addEventListener('click', () => {
 
 ```
 ┌─────────────────────────────────────────┐
-│         O(n) Keyed Diff                 │
+│         O(n) Keyed Diff                │
 ├─────────────────────────────────────────┤
 │                                         │
-│  diffChildrenKeyed(new, old)            │
+│  diffChildrenKeyed(new, old)           │
 │       │                                 │
-│       ├──▶ 按 key 建立 Map              │
+│       ├──▶ 按 key 建立 Map             │
 │       │     ├──▶ newKeyed: Map        │
-│       │     └──▶ oldKeyed: Map         │
+│       │     └──▶ oldKeyed: Map        │
 │       │                                 │
-│       ├──▶ 第一遍：顺序扫描             │
+│       ├──▶ 第一遍：顺序扫描            │
 │       │     ├──▶ 新增 → INSERT        │
-│       │     ├──▶ 匹配 → 递归 diff      │
+│       │     ├──▶ 匹配 → 递归 diff     │
 │       │     └──▶ 乱序 → MOVE          │
 │       │                                 │
-│       └──▶ 第二遍：删除检测             │
+│       └──▶ 第二遍：删除检测            │
 │             └──▶ 剩余旧节点 → REMOVE   │
 │                                         │
-│  PatchType: REPLACE | REMOVE | INSERT  │
+│  PatchType: REPLACE | REMOVE | INSERT │
 │              UPDATE | MOVE | TEXT       │
 │                                         │
 └─────────────────────────────────────────┘
@@ -326,31 +444,31 @@ button.addEventListener('click', () => {
 
 ```
 ┌─────────────────────────────────────────┐
-│              VNode                       │
+│              VNode                         │
 ├─────────────────────────────────────────┤
 │                                         │
-│  interface VNode {                     │
-│    type: string | Component             │
-│    props: VNodeProps                   │
-│    children: (VNode | string)[]         │
-│    key?: string | number                │
+│  interface VNode {                      │
+│    type: string | Component            │
+│    props: VNodeProps                  │
+│    children: (VNode | string)[]       │
+│    key?: string | number               │
 │    flags: VNodeFlags                   │
-│    patchFlag?: PatchFlags  // 优化      │
+│    patchFlag?: PatchFlags  // 优化    │
 │  }                                     │
 │                                         │
-│  enum VNodeFlags {                     │
-│    Element = 1,                        │
-│    Text = 2,                           │
-│    Component = 4,                      │
-│    Fragment = 8                        │
+│  enum VNodeFlags {                    │
+│    Element = 1,                       │
+│    Text = 2,                          │
+│    Component = 4,                     │
+│    Fragment = 8                       │
 │  }                                     │
 │                                         │
-│  enum PatchFlags {                     │
-│    TEXT = 1,    // 仅文本变化           │
-│    CLASS = 2,   // 仅 class 变化        │
-│    STYLE = 4,   // 仅 style 变化        │
-│    PROPS = 8,   // 其他 props 变化     │
-│    FULL = 16    // 完整 diff            │
+│  enum PatchFlags {                    │
+│    TEXT = 1,    // 仅文本变化         │
+│    CLASS = 2,   // 仅 class 变化      │
+│    STYLE = 4,   // 仅 style 变化      │
+│    PROPS = 8,   // 其他 props 变化   │
+│    FULL = 16    // 完整 diff          │
 │  }                                     │
 │                                         │
 └─────────────────────────────────────────┘
@@ -381,11 +499,11 @@ AI 返回标准化 JSON，自动映射到组件：
 ┌─────────────────────────────────┐
 │  ┌───────────────────────────┐  │
 │  │ 用户名                   │  │
-│  │ [________________]      │  │
+│  │ [________________]        │  │
 │  └───────────────────────────┘  │
 │  ┌───────────────────────────┐  │
 │  │ 密码                     │  │
-│  │ [________________]      │  │
+│  │ [________________]        │  │
 │  └───────────────────────────┘  │
 │        [登录]                    │
 └─────────────────────────────────┘
@@ -403,8 +521,8 @@ interface AIStreamState {
   isGenerating: boolean;   // 是否正在生成
   progress: number;       // 进度 0-100
   currentSpec: Spec;      // 当前解析的 Spec
-  history: Spec[];         // 历史记录
-  error: string | null;   // 错误信息
+  history: Spec[];        // 历史记录
+  error: string | null;  // 错误信息
 }
 
 // 监听
@@ -436,10 +554,6 @@ router.register('onSubmit', async (data) => {
 
 router.register('onClick', async ({ id, action }) => {
   return await ai.understand('click', { id, action });
-});
-
-router.register('onChange', async ({ field, value }) => {
-  return await ai.understand('input_change', { field, value });
 });
 
 // 使用
@@ -486,6 +600,98 @@ const spec = {
 
 ---
 
+## 安全建议
+
+### 问题：前端暴露 API Key 不安全
+
+```
+❌ 错误做法：
+  前端直接调用 AI API，API Key 暴露在浏览器中
+  ↓
+  用户可以通过 F12 看到 API Key
+  ↓
+  任何人可以刷你的 API 额度
+```
+
+### 正确架构：后端代理
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   前端      │     │   后端      │     │   AI API    │
+│  (AIRender) │     │  (API Proxy) │     │  (LLM)     │
+│             │     │             │     │             │
+│ API Key: ✗ │     │ API Key: ✓  │     │             │
+│  只渲染     │◀───▶│  安全转发   │───▶│  AI 返回    │
+└─────────────┘     └─────────────┘     └─────────────┘
+```
+
+### 实现建议
+
+#### 1. 后端代理（推荐）
+
+```javascript
+// 后端 - 安全转发 AI 请求
+app.post('/api/generate', async (req, res) => {
+  const { prompt } = req.body;
+
+  // API Key 只在服务器端使用
+  const response = await callAI('openai', {
+    apiKey: process.env.OPENAI_API_KEY
+  }, prompt);
+
+  res.json({ spec: parseAIResponse(response.content) });
+});
+```
+
+#### 2. Vite 代理开发
+
+```javascript
+// vite.config.js
+export default {
+  server: {
+    proxy: {
+      '/api/ai': {
+        target: 'https://api.openai.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ai/, '/v1/chat/completions'),
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        }
+      }
+    }
+  }
+};
+```
+
+#### 3. 环境变量
+
+```bash
+# .env (不要提交到 Git)
+OPENAI_API_KEY=sk-xxx
+MINIMAX_API_KEY=xxx
+```
+
+```javascript
+// 使用时
+const response = await fetch('/api/ai', {
+  headers: {
+    'Authorization': `Bearer ${import.meta.env.VITE_API_KEY}`
+  }
+});
+```
+
+### 最佳实践
+
+| 做法 | 说明 |
+|------|------|
+| API Key 后端存储 | 永远不要把 Key 放在前端代码 |
+| 限制 API Key 权限 | 只给需要的 API 权限 |
+| 请求频率限制 | 防止滥用 |
+| 使用代理 | 隐藏真实 AI API 地址 |
+| 监控异常 | 发现异常调用及时告警 |
+
+---
+
 ## API 参考
 
 ### AI Native 核心
@@ -516,11 +722,11 @@ app.destroy();
 #### createAIGen
 
 ```typescript
-// 创建 AI 生成器
+// 创建 AI 生成器（需要后端代理支持 CORS）
 const gen = createAIGen({
   container: '#app',
   apiKey: 'your-key',
-  provider: 'minimax',  // 或 'openai'
+  provider: 'minimax',
   model: 'M2-her'
 });
 
@@ -546,7 +752,7 @@ stream.onUpdate(state => {
 // 流式生成
 for await (const state of stream.generate('创建仪表盘')) {
   render(state.currentSpec);
-}
+});
 
 // 非流式
 const spec = await stream.generateOnce('创建表单');
@@ -554,7 +760,7 @@ const spec = await stream.generateOnce('创建表单');
 // 状态管理
 stream.getState();       // 当前状态
 stream.getHistory();     // 历史
-stream.clearHistory();   // 清空
+stream.clearHistory();    // 清空
 ```
 
 #### IntentRouter
@@ -594,7 +800,7 @@ const renderer = registry.get('button');
 ```typescript
 const [count, setCount] = createSignal(0);
 count();        // 读取
-setCount(1);    // 设置
+setCount(1);   // 设置
 setCount(c => c + 1);  // 更新
 ```
 
@@ -651,7 +857,7 @@ ref.current.focus();
 #### forwardRef
 
 ```typescript
-const FowardedInput = forwardRef((props, ref) => {
+const ForwardedInput = forwardRef((props, ref) => {
   return h('input', { ref });
 });
 ```
@@ -722,7 +928,7 @@ const [value, setValue] = createSignal(initial);
 // 或
 const signal = new Signal(initial);
 signal.get();   // 读取
-signal.set(1); // 写入
+signal.set(1);  // 写入
 ```
 
 ### Registry
