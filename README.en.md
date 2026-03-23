@@ -11,6 +11,8 @@
 - Input: AI-generated JSON / structured data
 - Output: High-performance UI components
 - Built-in AI adapters for major LLM providers
+- **Streaming**: Real-time display of AI generation progress
+- **Intent Routing**: AI UI interactions automatically trigger AI understanding
 
 ## Quick Start
 
@@ -41,32 +43,48 @@ const app = new AIRender({
 app.update(newSpecsFromAI);
 ```
 
-### Method 2: Traditional JSX
-
-```tsx
-import { h, render } from 'ai-render-runtime';
-
-const App = () => (
-  <div>
-    <h1>Hello AI Render</h1>
-    <button onClick={() => console.log('clicked')}>Click</button>
-  </div>
-);
-
-render(<App />, document.getElementById('root'));
-```
-
-### Method 3: AI-Enhanced Rendering
+### Method 2: Streaming Generation
 
 ```javascript
-import { generate } from 'ai-render-runtime';
+import { createAIStream } from 'ai-render-runtime';
 
-// Natural language → AI generates UI → Render
-const gen = await generate(
-  'Create a login form with username, password inputs and submit button',
-  '#app',
-  'your-api-key'
-);
+const stream = createAIStream({ apiKey: 'your-key' });
+
+// Listen to AI generation state in real-time
+stream.onUpdate(state => {
+  console.log(`Progress: ${state.progress}%`);
+  if (state.currentSpec) {
+    render(state.currentSpec); // Real-time render
+  }
+});
+
+// Start streaming generation
+for await (const state of stream.generate('Create a login form')) {
+  // Incremental render AI output
+}
+```
+
+### Method 3: Intent Routing
+
+```javascript
+import { createIntentRouter, createAIStream } from 'ai-render-runtime';
+
+const router = createIntentRouter();
+
+// Register interaction handler
+router.register('onSubmit', async (data) => {
+  // AI understands submitted data
+  return await ai.understand('User submitted login form', data);
+});
+
+router.register('onClick', async (buttonId) => {
+  return await ai.understand(`User clicked ${buttonId} button`);
+});
+
+// Bind to AI-generated UI
+button.addEventListener('click', () => {
+  router.handle('onClick', 'login-btn');
+});
 ```
 
 ## AI-Native Features
@@ -86,7 +104,47 @@ AI returns standardized JSON, automatically mapped to components:
 }
 ```
 
-### 2. Built-in Component Registry
+### 2. Streaming Render
+
+Real-time display of AI generation progress:
+
+```javascript
+const stream = createAIStream(config);
+stream.onUpdate(state => {
+  updateProgress(state.progress);
+  if (state.currentSpec) {
+    renderIncremental(state.currentSpec);
+  }
+});
+```
+
+### 3. Intent Routing
+
+AI UI interactions automatically trigger AI understanding:
+
+```javascript
+const router = createIntentRouter();
+router.register('onSubmit', async (data) => {
+  return await ai.understand('Form submitted', data);
+});
+```
+
+### 4. AI State Management
+
+```javascript
+const stream = createAIStream(config);
+
+// Get current state
+stream.getState();    // { isGenerating, progress, currentSpec, history, error }
+
+// Get history
+stream.getHistory();   // All generated UI history
+
+// Clear history
+stream.clearHistory();
+```
+
+### 5. Built-in Component Registry
 
 | Component | Description |
 |-----------|-------------|
@@ -98,35 +156,6 @@ AI returns standardized JSON, automatically mapped to components:
 | `alert` | Alert box |
 | `stats` | Statistics card |
 | `profile` | User profile card |
-
-### 3. Hot Updates
-
-No page refresh needed when AI returns new data:
-
-```javascript
-// Incremental update
-app.update(newSpecs);
-
-// Or partial update
-app.render(partialSpecs);
-```
-
-### 4. AI Adapters
-
-Support for major LLM providers:
-
-```javascript
-import { createAIGen } from 'ai-render-runtime';
-
-const gen = createAIGen({
-  container: '#app',
-  apiKey: 'your-api-key',
-  provider: 'minimax'  // or 'openai', 'anthropic'
-});
-
-// User interaction → AI understands intent → Generate UI
-await gen.generate('Show top 3 selling products this month');
-```
 
 ## Why AI Render?
 
@@ -140,40 +169,36 @@ With AI Render:
 AI returns JSON → AIRender.render() → Done
 ```
 
-## Architecture
-
-### Reactive Core
-
-- **Signal** - Fine-grained reactivity, precise dependency tracking
-- **Proxy Reactivity** - Vue 3-style deep reactivity
-- **Computed** - Lazy-evaluated caching
-
-### High-Performance Rendering
-
-- **O(n) Diff** - Key-based difference algorithm
-- **PatchFlags** - Fine-grained DOM updates
-- **Fiber Scheduler** - Interruptible rendering with priority support
-
-### Modern DX
-
-- JSX support
-- Full TypeScript types
-- SSR/Hydrate support
+With Streaming AI Render:
+```
+AI streams output → Real-time incremental render → User sees generation process
+```
 
 ## API Overview
 
-### Core
+### AI Native Core
 
 ```typescript
-// AI-driven rendering
+// Render AI output directly
 new AIRender({ container, initialSpec })
 air.update(specs)
 
-// Traditional rendering
-render(vnode, container)
+// Streaming generation
+createAIStream(config)
+stream.generate(prompt)  // AsyncGenerator
+stream.onUpdate(callback)
+stream.getState()
+stream.getHistory()
 
-// JSX
-jsx(type, props)
+// Intent routing
+createIntentRouter()
+router.register(intent, handler)
+router.handle(intent, payload)
+
+// AI generation
+createAIGen(options)
+gen.generate(prompt)
+generate(prompt, container, apiKey)  // Convenience function
 ```
 
 ### Reactivity
@@ -182,7 +207,7 @@ jsx(type, props)
 createSignal(initial)      // Signal
 reactive(obj)              // Reactive object
 computed(fn)               // Computed value
-watch(fn, callback)        // Watch
+watch(fn, callback)       // Watch
 ```
 
 ### Components
@@ -199,15 +224,6 @@ useRef(initial?)          // DOM reference
 onMounted(fn)             // After mount
 onUpdated(fn)             // After update
 onUnmounted(fn)           // After unmount
-```
-
-### Advanced
-
-```typescript
-KeepAlive                  // Component caching
-Suspense                   // Async loading
-defineAsyncComponent()     // Async component
-ErrorBoundary             // Error boundary
 ```
 
 ## Install

@@ -11,6 +11,8 @@
 - 输入：AI 生成的 JSON/结构化数据
 - 输出：高性能的 UI 组件
 - 内置 AI 适配器，支持主流大模型
+- **流式渲染**：实时显示 AI 生成过程
+- **Intent 路由**：AI UI 交互自动触发 AI 理解
 
 ## 快速开始
 
@@ -41,32 +43,48 @@ const app = new AIRender({
 app.update(newSpecsFromAI);
 ```
 
-### 方式 2: 传统 JSX
-
-```tsx
-import { h, render } from 'ai-render-runtime';
-
-const App = () => (
-  <div>
-    <h1>Hello AI Render</h1>
-    <button onClick={() => console.log('clicked')}>点击</button>
-  </div>
-);
-
-render(<App />, document.getElementById('root'));
-```
-
-### 方式 3: AI 增强渲染
+### 方式 2: 流式生成
 
 ```javascript
-import { generate } from 'ai-render-runtime';
+import { createAIStream } from 'ai-render-runtime';
 
-// 自然语言描述 → AI 生成 UI → 渲染
-const gen = await generate(
-  '创建一个登录表单，包含用户名、密码输入框和提交按钮',
-  '#app',
-  'your-api-key'
-);
+const stream = createAIStream({ apiKey: 'your-key' });
+
+// 实时监听 AI 生成状态
+stream.onUpdate(state => {
+  console.log(`生成进度: ${state.progress}%`);
+  if (state.currentSpec) {
+    render(state.currentSpec); // 实时渲染
+  }
+});
+
+// 启动流式生成
+for await (const state of stream.generate('创建一个登录表单')) {
+  // 增量渲染 AI 输出
+}
+```
+
+### 方式 3: Intent 路由
+
+```javascript
+import { createIntentRouter, createAIStream } from 'ai-render-runtime';
+
+const router = createIntentRouter();
+
+// 注册交互处理器
+router.register('onSubmit', async (data) => {
+  // AI 理解提交的数据
+  return await ai.understand('用户提交了登录表单', data);
+});
+
+router.register('onClick', async (buttonId) => {
+  return await ai.understand(`用户点击了 ${buttonId} 按钮`);
+});
+
+// 绑定到 AI 生成的 UI
+button.addEventListener('click', () => {
+  router.handle('onClick', 'login-btn');
+});
 ```
 
 ## AI 原生特性
@@ -86,7 +104,47 @@ AI 返回标准化 JSON，自动映射到组件：
 }
 ```
 
-### 2. 内置组件注册表
+### 2. 流式渲染
+
+实时显示 AI 生成过程：
+
+```javascript
+const stream = createAIStream(config);
+stream.onUpdate(state => {
+  updateProgress(state.progress);
+  if (state.currentSpec) {
+    renderIncremental(state.currentSpec);
+  }
+});
+```
+
+### 3. Intent 路由
+
+AI UI 交互自动触发 AI 理解：
+
+```javascript
+const router = createIntentRouter();
+router.register('onSubmit', async (data) => {
+  return await ai.understand('表单提交', data);
+});
+```
+
+### 4. AI 状态管理
+
+```javascript
+const stream = createAIStream(config);
+
+// 获取当前状态
+stream.getState();    // { isGenerating, progress, currentSpec, history, error }
+
+// 获取历史
+stream.getHistory();   // 所有生成的 UI 历史
+
+// 清空历史
+stream.clearHistory();
+```
+
+### 5. 内置组件注册表
 
 | 组件 | 说明 |
 |------|------|
@@ -98,35 +156,6 @@ AI 返回标准化 JSON，自动映射到组件：
 | `alert` | 警告框 |
 | `stats` | 统计卡片 |
 | `profile` | 用户卡片 |
-
-### 3. 热更新
-
-AI 返回新数据时，无需刷新页面：
-
-```javascript
-// 增量更新
-app.update(newSpecs);
-
-// 或局部更新
-app.render(partialSpecs);
-```
-
-### 4. AI 适配器
-
-支持主流大模型：
-
-```javascript
-import { createAIGen } from 'ai-render-runtime';
-
-const gen = createAIGen({
-  container: '#app',
-  apiKey: 'your-api-key',
-  provider: 'minimax'  // 或 'openai', 'anthropic'
-});
-
-// 用户交互 → AI 理解意图 → 生成 UI
-await gen.generate('显示本月销售前三的商品');
-```
 
 ## 为什么需要 AI Render？
 
@@ -140,40 +169,36 @@ AI 返回 JSON → 手动写组件 → 绑定数据 → 测试
 AI 返回 JSON → AIRender.render() → 完成
 ```
 
-## 技术架构
-
-### 响应式内核
-
-- **Signal** - 细粒度响应式，精准追踪依赖
-- **Proxy 响应式** - Vue 3 风格深层响应
-- **Computed** - 惰性求值缓存
-
-### 高性能渲染
-
-- **O(n) Diff** - key-based 差异算法
-- **PatchFlags** - 精细化 DOM 更新
-- **Fiber 调度** - 可中断渲染，支持优先级
-
-### 现代开发体验
-
-- JSX 支持
-- TypeScript 完整类型
-- SSR/Hydrate 支持
+使用流式 AI Render：
+```
+AI 流式输出 → 实时增量渲染 → 用户看到生成过程
+```
 
 ## API 概览
 
-### 核心
+### AI Native 核心
 
 ```typescript
-// AI 驱动的渲染
+// 直接渲染 AI 输出
 new AIRender({ container, initialSpec })
 air.update(specs)
 
-// 传统渲染
-render(vnode, container)
+// 流式生成
+createAIStream(config)
+stream.generate(prompt)  // AsyncGenerator
+stream.onUpdate(callback)
+stream.getState()
+stream.getHistory()
 
-// JSX
-jsx(type, props)
+// Intent 路由
+createIntentRouter()
+router.register(intent, handler)
+router.handle(intent, payload)
+
+// AI 生成
+createAIGen(options)
+gen.generate(prompt)
+generate(prompt, container, apiKey)  // 便捷函数
 ```
 
 ### 响应式
@@ -182,7 +207,7 @@ jsx(type, props)
 createSignal(initial)      // 信号
 reactive(obj)              // 响应式对象
 computed(fn)               // 计算属性
-watch(fn, callback)        // 监听
+watch(fn, callback)       // 监听
 ```
 
 ### 组件
@@ -198,16 +223,7 @@ useRef(initial?)          // DOM 引用
 ```typescript
 onMounted(fn)             // 挂载完成
 onUpdated(fn)             // 更新完成
-onUnmounted(fn)           // 卸载
-```
-
-### 高级
-
-```typescript
-KeepAlive                  // 组件缓存
-Suspense                   // 异步加载
-defineAsyncComponent()     // 异步组件
-ErrorBoundary             // 错误边界
+onUnmounted(fn)            // 卸载
 ```
 
 ## 安装
