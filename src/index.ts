@@ -161,6 +161,9 @@ export { reactive, ref as reactiveRef, computed, watchEffect, isRef, watchProxy 
 // ============ AI Stream & Intent ============
 export { createAIStream, createIntentRouter, AIStream, IntentRouter, AIStreamState, AIStreamConfig } from './ai-stream';
 
+// ============ Spec Contract ============
+export { Spec, SpecMeta, ViewSpec, LayoutSpec, ActionSpec, ActionType, createSpec, SPEC_VERSION } from './spec-contract';
+
 // 便捷函数
 export function createAIRender(container: Element | string, initialSpec?: any | any[]) {
   return new AIRender({ container, initialSpec });
