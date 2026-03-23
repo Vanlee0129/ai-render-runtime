@@ -4,6 +4,17 @@
  */
 
 import { VNode, h } from './vdom';
+import { SPEC_VERSION, Spec, ViewSpec, createSpec } from './spec-contract';
+
+// 旧格式兼容：如果传入的是简单 ComponentSpec，自动包装为 Spec
+export function wrapToSpec(spec: ComponentSpec | ComponentSpec[], intent = 'unknown'): Spec {
+  const specs = Array.isArray(spec) ? spec : [spec];
+  const view: ViewSpec = {
+    type: 'custom',
+    components: specs,
+  };
+  return createSpec(intent, view);
+}
 
 export interface ComponentSpec {
   type: string;
