@@ -111,52 +111,157 @@ export class Renderer {
   }
   
   /**
-   * Hydrate - 复用已有 DOM，绑定事件
-   * 用于 SSR 场景
+   * Hydrate - SSR 场景：复用已有 DOM，绑定事件
+   * 增强版：更精确的 DOM 复用和匹配
    */
   hydrate(vnode: VNode): void {
     this.context.vnode = vnode;
-    
+
     if (!this.context.container.firstChild) {
-      // 没有已有 DOM，执行正常渲染
       this.render(vnode);
       return;
     }
-    
-    // 复用第一个子节点作为根 DOM
+
+    // 复用根 DOM
     this.context.dom = this.context.container.firstChild as Element;
-    
-    // 递归绑定事件
-    this.hydrateElement(this.context.dom, vnode);
+
+    // 递归 hydrate
+    this.hydrateTree(this.context.dom, vnode);
   }
-  
+
   /**
-   * 递归绑定事件到已有 DOM
+   * 递归 hydrate 树
    */
-  private hydrateElement(dom: Element | Text | Comment, vnode: VNode): void {
-    if (!vnode || !dom) return;
-    
-    // 绑定事件处理器
-    if (vnode.props) {
-      for (const [key, value] of Object.entries(vnode.props)) {
-        if (key.startsWith('on') && typeof value === 'function') {
-          const eventName = key.slice(2).toLowerCase();
-          dom.addEventListener(eventName, value as EventListener);
+  private hydrateTree(dom: Element | Text | Comment, vnode: VNode): boolean {
+    if (!dom || !vnode) return false;
+
+    // 文本节点
+    if (vnode.flags === VNodeFlags.Text || vnode.type === 'text') {
+      if (dom.nodeType === Node.TEXT_NODE) {
+        return true;
+      }
+      return false;
+    }
+
+    // Fragment - hydrate children
+    if (vnode.type === 'fragment' || vnode.type === 'Fragment') {
+      return this.hydrateFragment(dom as Comment, vnode);
+    }
+
+    // 组件
+    if (vnode.flags === VNodeFlags.Component) {
+      return this.hydrateComponent(dom as Element, vnode);
+    }
+
+    // 元素
+    if (dom.nodeType !== Node.ELEMENT_NODE) return false;
+
+    const el = dom as Element;
+    const tagMatch = el.tagName.toLowerCase() === (vnode.type as string).toLowerCase();
+
+    if (!tagMatch) {
+      console.warn(`Hydrate tag mismatch: expected ${vnode.type}, got ${el.tagName}`);
+      return false;
+    }
+
+    // 绑定事件
+    this.hydrateElementProps(el, vnode);
+
+    // 递归 hydrate 子节点
+    this.hydrateChildren(el, vnode.children);
+
+    return true;
+  }
+
+  /**
+   * hydrate Fragment
+   */
+  private hydrateFragment(dom: Comment, vnode: VNode): boolean {
+    const children = Array.isArray(vnode.children) ? vnode.children : [vnode.children];
+    let childDom = dom.nextSibling;
+
+    for (const child of children) {
+      if (!childDom) break;
+      if (typeof child === 'string') {
+        if (childDom.nodeType === Node.TEXT_NODE) {
+          childDom = childDom.nextSibling;
+          continue;
         }
+        break;
+      }
+      if (this.hydrateTree(childDom as Element, child)) {
+        childDom = childDom.nextSibling;
+      } else {
+        break;
       }
     }
-    
-    // 递归处理子节点
-    if (vnode.children && dom.childNodes) {
-      const children = Array.isArray(vnode.children) ? vnode.children : [vnode.children];
-      children.forEach((child, i) => {
-        if (child && typeof child === 'object' && 'type' in child) {
-          const childDom = dom.childNodes[i] as Element | Text | Comment;
-          if (childDom) {
-            this.hydrateElement(childDom, child);
-          }
+
+    return true;
+  }
+
+  /**
+   * hydrate 组件
+   */
+  private hydrateComponent(dom: Element, vnode: VNode): boolean {
+    const Component = vnode.type as Component;
+    const props = vnode.props || {};
+
+    try {
+      const result = Component(props);
+      if (result === null) return true;
+
+      return this.hydrateTree(dom, result);
+    } catch (e) {
+      console.error('Component hydrate error:', e);
+      return false;
+    }
+  }
+
+  /**
+   * hydrate 元素属性和事件
+   */
+  private hydrateElementProps(el: Element, vnode: VNode): void {
+    if (!vnode.props) return;
+
+    // 初始化事件处理器映射
+    if (!(el as any)._eventHandlers) {
+      (el as any)._eventHandlers = new Map();
+    }
+
+    for (const [key, value] of Object.entries(vnode.props)) {
+      if (key === 'children' || key === 'key') continue;
+
+      if (key.startsWith('on') && typeof value === 'function') {
+        const eventName = key.slice(2).toLowerCase();
+        (el as any)._eventHandlers.set(eventName, value);
+      }
+    }
+  }
+
+  /**
+   * hydrate 子节点
+   */
+  private hydrateChildren(parent: Element, children: (VNode | string)[]): void {
+    if (!children || children.length === 0) return;
+
+    let childDom = parent.firstChild;
+
+    for (const child of children) {
+      if (!childDom) break;
+
+      if (typeof child === 'string') {
+        if (childDom.nodeType === Node.TEXT_NODE) {
+          childDom = childDom.nextSibling;
+          continue;
         }
-      });
+        break;
+      }
+
+      if (this.hydrateTree(childDom as Element, child)) {
+        childDom = childDom.nextSibling;
+      } else {
+        break;
+      }
     }
   }
   
