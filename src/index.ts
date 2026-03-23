@@ -4,8 +4,8 @@
  */
 
 // 导入依赖
-import { Signal, createSignal, createArraySignal, createEffect, batch, track, createWatch, watch, WatchOptions, WatchStopHandle } from './signal';
-import { h, t, Fragment, createComponent, Component, ComponentProps } from './vdom';
+import { Signal, createSignal, createArraySignal, createEffect, batch, track, createWatch, watch, WatchOptions, WatchStopHandle, createLazyComputed, ComputedSignal } from './signal';
+import { h, t, Fragment, createComponent, Component, ComponentProps, enableStaticHoisting, disableStaticHoisting } from './vdom';
 import { diff, batchDiff, reconcile, Patch, PatchType } from './diff';
 import { jsx, createElement, Fragment as JsxFragment } from './jsx';
 import { registry, ComponentSpec, RenderFn } from './registry';
@@ -124,8 +124,8 @@ export class AIGenRender {
 }
 
 // 导出供外部使用
-export { Signal, createSignal, createArraySignal, createEffect, batch, track, createWatch, watch, WatchOptions, WatchStopHandle };
-export { h, t, Fragment, createComponent, jsx, createElement };
+export { Signal, createSignal, createArraySignal, createEffect, batch, track, createWatch, watch, WatchOptions, WatchStopHandle, createLazyComputed, ComputedSignal };
+export { h, t, Fragment, createComponent, jsx, createElement, enableStaticHoisting, disableStaticHoisting };
 export { diff, batchDiff, reconcile, Patch, PatchType };
 export { registry, ComponentSpec, RenderFn };
 export { SYSTEM_PROMPT, AIConfig, AIResponse } from './prompts';
@@ -133,7 +133,7 @@ export { AIProvider, callAI, parseAIResponse } from './ai-adapter';
 export { Renderer, createRenderer, mount };
 export { scheduleCallback, runWithPriority, getCurrentPriority, Priority, ImmediatePriority, UserBlockingPriority, NormalPriority, LowPriority, IdlePriority };
 export { memo, useMemo, useCallback, isMemoized } from './memo';
-export { createContext, useContext, pushContext, popContext, Context } from './context';
+export { createContext, useContext, pushContext, popContext, Context, provide, inject, InjectionKey, createInjectionKey } from './context';
 export { ErrorBoundary, componentDidCatch, ErrorInfo, ErrorBoundaryState } from './error-boundary';
 export { ref, useRef, forwardRef, Ref, RefCallback } from './refs';
 export { onMounted, onUpdated, onUnmounted, onBeforeMount, onBeforeUpdate, onBeforeUnmount } from './lifecycle';

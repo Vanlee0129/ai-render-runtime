@@ -176,7 +176,11 @@ export function watchEffect(fn: () => void): () => void {
   };
 }
 
-export function watch<T>(
+/**
+ * watchProxy - Watch using Proxy-based reactivity
+ * Use this when watching reactive() objects
+ */
+export function watchProxy<T>(
   source: () => T,
   callback: (newValue: T, oldValue: T) => void,
   options?: { immediate?: boolean }
