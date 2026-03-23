@@ -3,12 +3,13 @@
  * 核心渲染引擎
  */
 
-import { VNode, VNodeFlags, VNodeProps, Component, ComponentProps } from './vdom';
+import { VNode, VNodeFlags, VNodeProps, Component, ComponentProps, PatchFlags } from './vdom';
 import { Ref } from './refs';
 import { Signal, batch, createSignal } from './signal';
 import { scheduleCallback, NormalPriority } from './scheduler';
 import { diff, batchDiff, reconcile, Patch, PatchType, diffChildrenKeyed } from './diff';
 import { setMemoRenderId, clearMemoCache } from './memo';
+import { setCurrentRenderer } from './context';
 
 // Event delegation system
 type EventHandler = (e: Event) => void;
@@ -98,6 +99,9 @@ export class Renderer {
    * 渲染虚拟节点到 DOM
    */
   render(vnode: VNode | null): void {
+    // 设置当前渲染器上下文，用于 Context API
+    setCurrentRenderer(this);
+
     // 设置 memo renderId（每个Renderer实例独立的render cycle）
     this.renderId++;
     const memoRenderId = `r${this.renderId}-${Date.now()}`;
@@ -107,6 +111,7 @@ export class Renderer {
 
     if (vnode === null) {
       setMemoRenderId(null);
+      setCurrentRenderer(null);
       this.unmount();
       return;
     }
@@ -119,6 +124,7 @@ export class Renderer {
       }
       this.isHydrating = false;
       setMemoRenderId(null);
+      setCurrentRenderer(null);
       return;
     }
 
@@ -133,6 +139,7 @@ export class Renderer {
     }
 
     setMemoRenderId(null);
+    setCurrentRenderer(null);
   }
   
   /**
@@ -463,7 +470,7 @@ export class Renderer {
     }
     
     // 更新属性
-    this.updateProps(parent as HTMLElement, newVNode.props, oldVNode.props);
+    this.updateProps(parent as HTMLElement, newVNode.props, oldVNode.props, newVNode.patchFlag);
     
     // 更新子节点
     this.updateChildren(parent, newVNode.children, oldVNode.children);
@@ -475,23 +482,42 @@ export class Renderer {
   private updateProps(
     dom: HTMLElement,
     newProps: VNodeProps,
-    oldProps: VNodeProps
+    oldProps: VNodeProps,
+    patchFlag?: PatchFlags
   ): void {
+    // If specific patchFlag is set, only update that
+    if (patchFlag === PatchFlags.CLASS) {
+      const newClass = newProps?.className ?? newProps?.class;
+      const oldClass = oldProps?.className ?? oldProps?.class;
+      if (newClass !== oldClass) {
+        dom.setAttribute('class', newClass || '');
+      }
+      return;
+    }
+
+    if (patchFlag === PatchFlags.STYLE) {
+      if (typeof newProps?.style === 'object') {
+        Object.assign(dom.style, newProps.style);
+      }
+      return;
+    }
+
+    // Default: full props update
     const allProps = new Set([...Object.keys(newProps || {}), ...Object.keys(oldProps || {})]);
-    
+
     allProps.forEach(key => {
       if (key === 'children' || key === 'key') return;
-      
+
       const newValue = newProps?.[key];
       const oldValue = oldProps?.[key];
-      
+
       // 事件
       if (key.startsWith('on') && typeof newValue === 'function') {
         const eventName = key.slice(2).toLowerCase();
         dom._eventHandlers?.set(eventName, newValue as EventHandler);
         return;
       }
-      
+
       // ref
       if (key === 'ref') {
         if (typeof newValue === 'function') {
@@ -501,7 +527,7 @@ export class Renderer {
         }
         return;
       }
-      
+
       // style
       if (key === 'style') {
         if (typeof newValue === 'object') {
@@ -509,7 +535,7 @@ export class Renderer {
         }
         return;
       }
-      
+
       // 其他属性
       if (newValue !== oldValue) {
         if (newValue === null || newValue === undefined) {

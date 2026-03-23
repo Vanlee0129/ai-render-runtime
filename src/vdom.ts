@@ -60,6 +60,7 @@ export interface VNode {
   children: (VNode | string)[];
   key?: string | number;
   flags: VNodeFlags;
+  patchFlag?: PatchFlags;
 }
 
 /**
@@ -73,6 +74,17 @@ export enum VNodeFlags {
 }
 
 /**
+ * PatchFlags - 精细化更新标志
+ */
+export enum PatchFlags {
+  TEXT = 1,        // 文本内容变化
+  CLASS = 2,       // class 变化
+  STYLE = 4,       // style 变化
+  PROPS = 8,       // 其他 props 变化 (非 class/style)
+  FULL = 16,       // 完整 diff
+}
+
+/**
  * 创建元素 VNode
  */
 export function h(
@@ -80,12 +92,14 @@ export function h(
   props: VNodeProps = {},
   ...children: (VNode | string)[]
 ): VNode {
+  const { key, patchFlag, ...rest } = props as VNodeProps & { patchFlag?: PatchFlags; key?: string | number };
   return {
     type: tag,
-    props,
+    props: rest,
     children: children.flat(),
-    key: props.key,
-    flags: VNodeFlags.Element
+    key,
+    flags: VNodeFlags.Element,
+    patchFlag
   };
 }
 
