@@ -6,6 +6,7 @@
 import { VNode, VNodeFlags, VNodeProps, Component, ComponentProps } from './vdom';
 import { Signal, batch, createSignal } from './signal';
 import { scheduleCallback, NormalPriority } from './scheduler';
+import { diff, batchDiff, reconcile, Patch, PatchType, diffChildrenKeyed } from './diff';
 
 export interface RenderOptions {
   container: Element;
@@ -322,13 +323,56 @@ export class Renderer {
     newChildren: (VNode | string)[],
     oldChildren: (VNode | string)[]
   ): void {
-    // 简化：直接重新渲染所有子节点
-    // 完整实现需要用 key 进行优化
+    // Use keyed diff if children have keys
+    const hasKeys = newChildren.some(c => typeof c === 'object' && c.key !== undefined) ||
+                    oldChildren.some(c => typeof c === 'object' && c.key !== undefined);
+
+    if (hasKeys) {
+      const patches = diffChildrenKeyed(newChildren, oldChildren);
+      this.applyPatches(parent, patches);
+    } else {
+      // Fallback to simple diff for children without keys
+      this.updateChildrenSimple(parent, newChildren, oldChildren);
+    }
+  }
+
+  private updateChildrenSimple(
+    parent: Element,
+    newChildren: (VNode | string)[],
+    oldChildren: (VNode | string)[]
+  ): void {
     while (parent.firstChild) {
       parent.removeChild(parent.firstChild);
     }
-    
     this.appendChildren(parent, newChildren);
+  }
+
+  private applyPatches(parent: Element, patches: Patch[]): void {
+    // Apply patches in order
+    patches.forEach(patch => {
+      switch (patch.type) {
+        case PatchType.INSERT:
+        case PatchType.REPLACE:
+          if (patch.newNode) {
+            const dom = this.createDom(patch.newNode);
+            const refNode = parent.childNodes[patch.index || 0];
+            if (refNode) {
+              parent.insertBefore(dom, refNode);
+            } else {
+              parent.appendChild(dom);
+            }
+          }
+          break;
+        case PatchType.REMOVE:
+          if (parent.childNodes[patch.index || 0]) {
+            parent.removeChild(parent.childNodes[patch.index || 0]);
+          }
+          break;
+        case PatchType.UPDATE:
+          // Handled by updateProps
+          break;
+      }
+    });
   }
   
   /**
