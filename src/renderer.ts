@@ -10,6 +10,7 @@ import { scheduleCallback, NormalPriority } from './scheduler';
 import { diff, batchDiff, reconcile, Patch, PatchType, diffChildrenKeyed } from './diff';
 import { setMemoRenderId, clearMemoCache } from './memo';
 import { setCurrentRenderer } from './context';
+import { setCurrentComponentInstance, callHook } from './lifecycle';
 
 // Event delegation system
 type EventHandler = (e: Event) => void;
@@ -336,13 +337,25 @@ export class Renderer {
     const props = vnode.props || {};
 
     try {
+      // Set current component for lifecycle hooks
+      setCurrentComponentInstance(Component);
+
+      // Call onBeforeMount
+      callHook(Component, 'onBeforeMount');
+
       const result = Component(props);
+
+      setCurrentComponentInstance(null);
+
       if (result === null) {
         return document.createComment('Empty Component');
       }
 
       const dom = this.createDom(result);
       (dom as any)._component = vnode;
+
+      // Call onMounted after DOM is created
+      callHook(Component, 'onMounted');
 
       // Transfer event handlers from vnode to actual DOM
       if (vnode.props && (dom as Element)._eventHandlers) {
@@ -356,6 +369,7 @@ export class Renderer {
 
       return dom;
     } catch (e) {
+      setCurrentComponentInstance(null);
       console.error('Component render error:', e);
       return document.createComment('Error');
     }

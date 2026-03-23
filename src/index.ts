@@ -46,11 +46,15 @@ export class AIRender {
   render(specs: any | any[]) {
     const specArray = Array.isArray(specs) ? specs : [specs];
     this.currentSpec = specArray;
-    
-    this.container.innerHTML = '';
-    // 重置渲染器状态，避免第二次渲染时 context.dom 指向已删除的节点
-    (this.renderer as any).context.dom = null;
-    (this.renderer as any).context.vnode = null;
+
+    // Only clear innerHTML if not hydrating and context.dom is not already null
+    // This preserves SSR-rendered DOM during hydration
+    if (!(this.renderer as any).isHydrating && (this.renderer as any).context.dom !== null) {
+      this.container.innerHTML = '';
+      // 重置渲染器状态，避免第二次渲染时 context.dom 指向已删除的节点
+      (this.renderer as any).context.dom = null;
+      (this.renderer as any).context.vnode = null;
+    }
     
     const vnodes: any[] = specArray.map(spec => registry.render(spec));
     
@@ -132,6 +136,7 @@ export { memo, useMemo, useCallback, isMemoized } from './memo';
 export { createContext, useContext, pushContext, popContext, Context } from './context';
 export { ErrorBoundary, componentDidCatch, ErrorInfo, ErrorBoundaryState } from './error-boundary';
 export { ref, useRef, forwardRef, Ref, RefCallback } from './refs';
+export { onMounted, onUpdated, onUnmounted, onBeforeMount, onBeforeUpdate, onBeforeUnmount } from './lifecycle';
 export type { Component, ComponentProps };
 
 // 便捷函数
