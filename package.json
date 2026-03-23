@@ -1,0 +1,28 @@
+{
+  "name": "ai-render-runtime",
+  "version": "0.1.0",
+  "description": "AI-driven declarative UI rendering engine",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest"
+  },
+  "keywords": [
+    "ai",
+    "ui",
+    "render",
+    "runtime",
+    "vdom",
+    "reactive"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.27.4",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.1",
+    "vitest": "^4.1.1"
+  }
+}

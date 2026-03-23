@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Render Runtime - Quick Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+      background: #09090b; 
+      color: #fff; 
+      padding: 40px;
+    }
+    
+    h1 { 
+      font-size: 28px; 
+      margin-bottom: 8px; 
+      background: linear-gradient(135deg, #a78bfa, #f472b6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    p { color: #71717a; margin-bottom: 32px; }
+    
+    /* GenUI 样式 */
+    .gen-root { display: flex; flex-direction: column; gap: 16px; max-width: 600px; }
+    .gen-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; }
+    .gen-title { font-size: 20px; font-weight: 600; margin: 0 0 12px; color: white; }
+    .gen-subtitle { font-size: 14px; color: rgba(255,255,255,0.6); margin: 0; }
+    .gen-form { display: flex; flex-direction: column; gap: 16px; }
+    .gen-field { display: flex; flex-direction: column; gap: 6px; }
+    .gen-label { font-size: 14px; color: rgba(255,255,255,0.8); }
+    .gen-input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 12px 16px; color: white; font-size: 14px; }
+    .gen-input:focus { outline: none; border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(167,139,250,0.2); }
+    .gen-btn { padding: 10px 20px; border-radius: 8px; font-weight: 500; cursor: pointer; border: none; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .gen-btn-primary { background: linear-gradient(135deg, #a78bfa, #f472b6); color: white; }
+    .gen-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(167,139,250,0.4); }
+    .gen-btn-secondary { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); }
+    .gen-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; background: rgba(167,139,250,0.2); color: #a78bfa; }
+    
+    code { background: #18181b; padding: 2px 8px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+    pre { background: #18181b; padding: 20px; border-radius: 12px; overflow-x: auto; margin: 16px 0; }
+    pre code { background: none; padding: 0; }
+  </style>
+</head>
+<body>
+  <h1>🚀 AI Render Runtime</h1>
+  <p>几行代码，接入 AI 驱动的 UI 渲染引擎</p>
+  
+  <div id="app"></div>
+  
+  <div style="margin-top: 40px;">
+    <h2 style="font-size: 18px; margin-bottom: 16px;">使用方式</h2>
+    <pre><code>// 1. 导入
+import { render } from 'ai-render-runtime';
+
+// 2. 定义 Spec
+const specs = [
+  { type: 'card', title: '标题', subtitle: '副标题' }
+];
+
+// 3. 一行渲染！
+render(specs, '#app');</code></pre>
+  </div>
+  
+  <script type="module">
+    import { render } from '../dist/bundle.js';
+    
+    // 模拟 AI 返回的 Spec 数据
+    const specs = [
+      {
+        type: 'card',
+        title: '👋 欢迎使用 AI Render Runtime',
+        subtitle: '下一代声明式 UI 渲染引擎',
+        badge: 'v1.0'
+      },
+      {
+        type: 'form',
+        title: '📝 用户反馈',
+        fields: [
+          { label: '邮箱', type: 'email', placeholder: 'your@email.com' },
+          { label: '建议', placeholder: '请输入您的建议...' }
+        ],
+        buttons: [
+          { label: '🚀 提交', variant: 'primary' }
+        ]
+      },
+      {
+        type: 'card',
+        title: '✨ 核心特性',
+        subtitle: '• Signal 响应式 · 虚拟 DOM · Diff 算法 · JSX 支持'
+      }
+    ];
+    
+    // 🎯 一行代码搞定！
+    render(specs, '#app');
+  </script>
+</body>
+</html>

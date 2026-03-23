@@ -1,0 +1,117 @@
+    // 调用 AI 生成 Spec
+    async function callAI(apiKey, prompt) {
+      const systemPrompt = `你是一个专业的 UI 生成器。根据用户的描述，生成 JSON 格式的界面规格。
+      
+支持以下组件类型：
+- card: 卡片容器，支持 title, subtitle, description, buttons, children
+- form: 表单，支持 title, fields, buttons
+- input: 输入框，支持 label, placeholder, type, name
+- button: 按钮，支持 label, variant (primary/secondary/danger), size (xs/sm/lg)
+- list: 列表，支持 title, items
+- alert: 警告框，支持 type (info/success/warning/danger), title, message
+- stats: 统计卡片，支持 items: [{label, value, trend}]
+- profile: 用户卡片，支持 avatar, name, email, badge
+- buttonGroup: 按钮组，支持 title, buttons
+
+只返回 JSON 数组，不要其他文字。
+示例格式：[{"type":"card","title":"标题","buttons":[{"type":"button","label":"按钮"}]}]`;
+
+      const response = await fetch('https://api.minimax.chat/v1/text/chatcompletion_pro', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'abab6.5s-chat',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error?.message || `API 请求失败: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || '[]';
+      
+      // 提取 JSON
+      let jsonStr = content;
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        jsonStr = jsonMatch[0];
+      }
+      
+      try {
+        return JSON.parse(jsonStr);
+      } catch {
+        console.error('Failed to parse JSON:', jsonStr);
+        throw new Error('AI 返回格式错误');
+      }
+    }
+    
+    // 渲染 Spec
+    function renderSpecs(specs) {
+      const canvas = document.getElementById('canvas');
+      canvas.innerHTML = '';
+      
+      if (!Array.isArray(specs)) {
+        specs = [specs];
+      }
+      
+      // 使用 AIRender
+      airRender = new AIRender({
+        container: canvas,
+        initialSpec: specs
+      });
+    }
+    
+    // 清空画布
+    window.clearCanvas = function() {
+      const canvas = document.getElementById('canvas');
+      canvas.innerHTML = `
+        <div class="canvas-empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M3 9h18M9 21V9"/>
+          </svg>
+          <p>在左侧描述你的界面</p>
+        </div>
+      `;
+      airRender = null;
+      showStatus('ready', 'Ready');
+    };
+    
+    // 显示错误
+    function showError(message) {
+      const canvas = document.getElementById('canvas');
+      canvas.innerHTML = `<div class="error-message">${message}</div>`;
+    }
+    
+    // 设置加载状态
+    function setLoading(loading) {
+      const btn = document.getElementById('generateBtn');
+      if (loading) {
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div><span>生成中...</span>';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = '<span>✨</span><span>生成 UI</span>';
+      }
+    }
+    
+    // 显示状态
+    function showStatus(type, text) {
+      const badge = document.getElementById('status');
+      badge.className = `badge badge-${type}`;
+      badge.textContent = text;
+    }
+  </script>
+</body>
+</html>

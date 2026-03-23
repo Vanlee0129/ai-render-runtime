@@ -29,19 +29,19 @@ export function memo<P extends ComponentProps>(
     return lastResult;
   };
 
-  Memoized.displayName = `memo(${Component.displayName || 'Component' + ++memoizedComponentCounter})`;
+  Memoized.displayName = `memo(${(Component as any).displayName || 'Component' + ++memoizedComponentCounter})`;
   Memoized.compare = compare;
   return Memoized;
 }
 
 function shallowCompare<P>(prevProps: P, nextProps: P): boolean {
-  const prevKeys = Object.keys(prevProps);
-  const nextKeys = Object.keys(nextProps);
+  const prevKeys = Object.keys(prevProps as Record<string, unknown>);
+  const nextKeys = Object.keys(nextProps as Record<string, unknown>);
 
   if (prevKeys.length !== nextKeys.length) return false;
 
   for (const key of prevKeys) {
-    if (prevProps[key as keyof P] !== nextProps[key as keyof P]) {
+    if ((prevProps as Record<string, unknown>)[key] !== (nextProps as Record<string, unknown>)[key]) {
       return false;
     }
   }
@@ -51,22 +51,19 @@ function shallowCompare<P>(prevProps: P, nextProps: P): boolean {
 /**
  * useMemo - Memoize a computed value
  */
+const memoCache = new Map<string, any>();
+
 export function useMemo<T>(compute: () => T, deps: any[]): T {
   // Simple implementation - in real runtime would integrate with renderer
   const key = deps.join(',');
-  const cache = useMemo.cache || (useMemo.cache = new Map());
 
-  if (cache.has(key)) {
-    return cache.get(key) as T;
+  if (memoCache.has(key)) {
+    return memoCache.get(key) as T;
   }
 
   const value = compute();
-  cache.set(key, value);
+  memoCache.set(key, value);
   return value;
-}
-
-namespace useMemo {
-  export let cache: Map<string, any> | undefined;
 }
 
 /**

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Render Runtime - Basic Example</title>
+  <style>
+    /* GenUI 样式 */
+    .gen-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 16px 0;
+    }
+    .gen-card-flat { background: rgba(255, 255, 255, 0.03); border: none; }
+    .gen-card-border { border: 1px solid; border-image: linear-gradient(135deg, #a78bfa, #f472b6) 1; }
+    .gen-card-glass { background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(10px); }
+    .gen-title { font-size: 20px; font-weight: 600; margin: 0 0 12px; color: white; }
+    .gen-subtitle { font-size: 14px; color: rgba(255, 255, 255, 0.6); margin: 0; }
+    .gen-description { font-size: 14px; color: rgba(255, 255, 255, 0.8); margin: 8px 0; }
+    .gen-form { display: flex; flex-direction: column; gap: 16px; }
+    .gen-field { display: flex; flex-direction: column; gap: 6px; }
+    .gen-label { font-size: 14px; color: rgba(255, 255, 255, 0.8); }
+    .gen-input {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: white;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .gen-input:focus { outline: none; border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2); }
+    .gen-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .gen-btn-primary { background: linear-gradient(135deg, #a78bfa, #f472b6); color: white; }
+    .gen-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(167, 139, 250, 0.4); }
+    .gen-btn-secondary { background: rgba(255, 255, 255, 0.1); color: white; border: 1px solid rgba(255, 255, 255, 0.2); }
+    .gen-btn-danger { background: linear-gradient(135deg, #f472b6, #fb7185); color: white; }
+    .gen-list { list-style: none; padding: 0; margin: 0; }
+    .gen-list-item { padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.8); }
+    .gen-list-item:last-child { border-bottom: none; }
+    .gen-alert { padding: 16px; border-radius: 8px; display: flex; align-items: center; gap: 12px; }
+    .gen-alert-info { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); }
+    .gen-alert-success { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); }
+    .gen-alert-warning { background: rgba(251, 146, 60, 0.1); border: 1px solid rgba(251, 146, 60, 0.3); }
+    .gen-alert-danger { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .gen-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+    .gen-badge-primary { background: rgba(167, 139, 250, 0.2); color: #a78bfa; }
+    .gen-badge-success { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .gen-badge-danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .gen-grid { display: grid; gap: 16px; }
+    .gen-grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .gen-grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .gen-grid-4 { grid-template-columns: repeat(4, 1fr); }
+    .gen-avatar { width: 40px; height: 40px; border-radius: 50%; }
+    .gen-avatar-lg { width: 64px; height: 64px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: white; margin: 0; padding: 40px; }
+    h1 { font-size: 28px; margin-bottom: 8px; }
+    .subtitle { color: rgba(255, 255, 255, 0.6); margin-bottom: 32px; }
+  </style>
+</head>
+<body>
+  <h1>AI Render Runtime</h1>
+  <p class="subtitle">基于 AI 的声明式 UI 渲染引擎</p>
+  
+  <div id="app"></div>
+  
+  <script type="module">
+    // 导入 Runtime（打包后的 bundle）
+    import { AIRender } from '../dist/bundle.js';
+    
+    console.log('AIRender loaded');
+    
+    // AI 生成的 Spec 数据
+    const specs = [
+      {
+        type: 'card',
+        title: '欢迎回来',
+        subtitle: '这是由 AI 渲染的组件',
+        description: 'AI Render Runtime 可以将 JSON Spec 转换为精美的 UI 组件。',
+        buttons: [
+          { type: 'button', label: '开始使用', variant: 'primary' },
+          { type: 'button', label: '了解更多', variant: 'secondary' }
+        ]
+      },
+      {
+        type: 'stats',
+        items: [
+          { label: '总用户', value: '12,345', trend: 25 },
+          { label: '活跃用户', value: '8,901', trend: 12 },
+          { label: '转化率', value: '68%', trend: -3 }
+        ]
+      },
+      {
+        type: 'form',
+        title: '用户反馈',
+        fields: [
+          { type: 'input', label: '邮箱', placeholder: '请输入邮箱' },
+          { type: 'input', label: '建议', placeholder: '请输入您的建议' }
+        ],
+        buttons: [
+          { type: 'button', label: '提交', variant: 'primary' }
+        ]
+      },
+      {
+        type: 'list',
+        title: '最近动态',
+        items: [
+          '用户 张三 创建了新项目',
+          '用户 李四 更新了文档',
+          '用户 王五 提交了代码'
+        ]
+      },
+      {
+        type: 'alert',
+        type: 'info',
+        title: '提示',
+        message: '系统将于今晚 10:00 进行维护'
+      }
+    ];
+    
+    console.log('Creating AIRender...');
+    
+    // 创建 AIRender 实例
+    const app = new AIRender({
+      container: '#app',
+      initialSpec: specs
+    });
+    
+    console.log('AIRender created, app:', app);
+    
+    // 模拟 AI 更新
+    setTimeout(() => {
+      app.update([
+        ...specs.slice(0, 2),
+        {
+          type: 'card',
+          title: '更新后的卡片',
+          description: '这是增量更新的效果'
+        },
+        ...specs.slice(3)
+      ]);
+    }, 3000);
+  </script>
+</body>
+</html>
