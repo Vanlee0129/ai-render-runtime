@@ -137,6 +137,7 @@ export { createContext, useContext, pushContext, popContext, Context } from './c
 export { ErrorBoundary, componentDidCatch, ErrorInfo, ErrorBoundaryState } from './error-boundary';
 export { ref, useRef, forwardRef, Ref, RefCallback } from './refs';
 export { onMounted, onUpdated, onUnmounted, onBeforeMount, onBeforeUpdate, onBeforeUnmount } from './lifecycle';
+export { KeepAlive, getKeepAliveCache, clearKeepAliveCache } from './keep-alive';
 export type { Component, ComponentProps };
 
 // 便捷函数

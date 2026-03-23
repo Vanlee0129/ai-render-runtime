@@ -11,6 +11,7 @@ import { diff, batchDiff, reconcile, Patch, PatchType, diffChildrenKeyed } from 
 import { setMemoRenderId, clearMemoCache } from './memo';
 import { setCurrentRenderer } from './context';
 import { setCurrentComponentInstance, callHook } from './lifecycle';
+import { getKeepAliveCache, setKeepAliveCache } from './keep-alive';
 
 // Event delegation system
 type EventHandler = (e: Event) => void;
@@ -19,6 +20,16 @@ declare global {
   interface Element {
     _eventHandlers?: Map<string, EventHandler>;
   }
+}
+
+function shouldKeepAlive(key: string | number, props: { include?: (string | number)[]; exclude?: (string | number)[] }): boolean {
+  if (props.exclude?.includes(key)) {
+    return false;
+  }
+  if (props.include && !props.include.includes(key)) {
+    return false;
+  }
+  return true;
 }
 
 export interface RenderOptions {
@@ -337,6 +348,18 @@ export class Renderer {
     const props = vnode.props || {};
 
     try {
+      // Check if this component should be kept alive
+      const keepAliveKey = (vnode as any)._keepAliveKey;
+      const keepAliveProps = (vnode as any)._keepAliveProps;
+
+      if (keepAliveKey !== undefined) {
+        const cached = getKeepAliveCache(keepAliveKey);
+        if (cached && shouldKeepAlive(keepAliveKey, keepAliveProps || {})) {
+          // Use cached DOM, return it without re-rendering
+          return cached.dom;
+        }
+      }
+
       // Set current component for lifecycle hooks
       setCurrentComponentInstance(Component);
 
@@ -365,6 +388,16 @@ export class Renderer {
             (dom as Element)._eventHandlers!.set(eventName, vnode.props[key]);
           }
         }
+      }
+
+      // Cache if this is a kept-alive component
+      if (keepAliveKey !== undefined) {
+        setKeepAliveCache(keepAliveKey, {
+          key: keepAliveKey,
+          vnode,
+          component: Component,
+          dom
+        });
       }
 
       return dom;
