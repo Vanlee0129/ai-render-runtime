@@ -13,6 +13,7 @@ import { Renderer, createRenderer, mount } from './renderer';
 import { SYSTEM_PROMPT, AIConfig, AIResponse } from './prompts';
 import { AIProvider, callAI, parseAIResponse } from './ai-adapter';
 import { scheduleCallback, runWithPriority, getCurrentPriority, Priority, ImmediatePriority, UserBlockingPriority, NormalPriority, LowPriority, IdlePriority } from './scheduler';
+import { StateStore } from './state-store';
 
 // AI 驱动的渲染选项
 export interface AIGenOptions {
@@ -30,17 +31,51 @@ export class AIRender {
   renderer: Renderer;
   container: Element;
   currentSpec: any[] = [];
+  stateStore: StateStore;
 
-  constructor(options: { container: Element | string; initialSpec?: any | any[] }) {
+  constructor(options: { container: Element | string; initialSpec?: any | any[]; enableHistory?: boolean }) {
     this.container = typeof options.container === 'string'
       ? document.querySelector(options.container)!
       : options.container;
 
     this.renderer = new Renderer(this.container);
+    this.stateStore = new StateStore();
 
     if (options.initialSpec) {
       this.render(options.initialSpec);
     }
+  }
+
+  saveSnapshot(label?: string): string {
+    return this.stateStore.saveSnapshot(label);
+  }
+
+  restore(snapshotId: string): boolean {
+    const spec = this.stateStore.getSnapshot(snapshotId)?.spec;
+    if (spec) {
+      this.render(spec);
+      return true;
+    }
+    return false;
+  }
+
+  undo(): boolean {
+    const success = this.stateStore.undo();
+    if (success) {
+      const spec = this.stateStore.getState();
+      if (spec) {
+        this.render(spec);
+      }
+    }
+    return success;
+  }
+
+  getHistory(): any[] {
+    return this.stateStore.getHistory().map(s => s.spec);
+  }
+
+  onStateChange(callback: (spec: any) => void): () => void {
+    return this.stateStore.subscribe(callback);
   }
 
   render(specs: any | any[]) {
