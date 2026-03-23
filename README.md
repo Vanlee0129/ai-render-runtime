@@ -1,32 +1,214 @@
 # AI Render Runtime
 
-下一代 AI 驱动的声明式 UI 渲染引擎，融合 React 和 Vue 的最佳特性。
+> 将 AI 生成的结构化数据直接渲染为 UI 组件的引擎
 
 [English](./README.en.md) | 中文
 
-## 核心特性
+## 核心价值
 
-### 响应式系统
-- **Signal** - 基于 Solid.js 的细粒度响应式追踪
-- **Proxy 响应式** - Vue 3 风格的深层响应式对象
-- **Computed** - 惰性求值计算属性
-- **Watch** - 灵活的副作用监听
+**AI Native** - 不是另一个 React，而是专为 AI 设计的渲染引擎：
 
-### 虚拟 DOM
-- **高性能 Diff** - O(n) 复杂度的 key-based diff 算法
-- **PatchFlags** - 精细化更新，只更新变化的属性
-- **VNode 缓存** - 静态元素只创建一次
+- 输入：AI 生成的 JSON/结构化数据
+- 输出：高性能的 UI 组件
+- 内置 AI 适配器，支持主流大模型
 
-### 组件系统
-- **生命周期** - 完整的 mount/update/unmount 钩子
-- **ErrorBoundary** - 组件级错误处理
-- **KeepAlive** - 组件实例缓存
-- **Suspense** - 异步组件加载状态
+## 快速开始
 
-### React 兼容
-- `memo` / `useMemo` / `useCallback` - 记忆化
-- `ref` / `forwardRef` - DOM 引用
-- `Context` - 跨层级状态共享
+### 方式 1: AI 驱动（核心场景）
+
+```javascript
+import { AIRender } from 'ai-render-runtime';
+
+// AI 生成的结构化数据
+const specs = [
+  {
+    type: 'card',
+    title: '销售报表',
+    children: [
+      { type: 'stats', label: '今日收入', value: '¥12,345' },
+      { type: 'stats', label: '订单数', value: '89' }
+    ]
+  }
+];
+
+// 直接渲染 AI 输出
+const app = new AIRender({
+  container: '#app',
+  initialSpec: specs
+});
+
+// AI 返回新数据时，热更新 UI
+app.update(newSpecsFromAI);
+```
+
+### 方式 2: 传统 JSX
+
+```tsx
+import { h, render } from 'ai-render-runtime';
+
+const App = () => (
+  <div>
+    <h1>Hello AI Render</h1>
+    <button onClick={() => console.log('clicked')}>点击</button>
+  </div>
+);
+
+render(<App />, document.getElementById('root'));
+```
+
+### 方式 3: AI 增强渲染
+
+```javascript
+import { generate } from 'ai-render-runtime';
+
+// 自然语言描述 → AI 生成 UI → 渲染
+const gen = await generate(
+  '创建一个登录表单，包含用户名、密码输入框和提交按钮',
+  '#app',
+  'your-api-key'
+);
+```
+
+## AI 原生特性
+
+### 1. Spec 驱动渲染
+
+AI 返回标准化 JSON，自动映射到组件：
+
+```json
+{
+  "type": "form",
+  "children": [
+    { "type": "input", "placeholder": "用户名" },
+    { "type": "input", "type": "password", "placeholder": "密码" },
+    { "type": "button", "label": "登录" }
+  ]
+}
+```
+
+### 2. 内置组件注册表
+
+| 组件 | 说明 |
+|------|------|
+| `card` | 卡片容器 |
+| `form` | 表单容器 |
+| `input` | 输入框 |
+| `button` | 按钮 |
+| `list` | 列表 |
+| `alert` | 警告框 |
+| `stats` | 统计卡片 |
+| `profile` | 用户卡片 |
+
+### 3. 热更新
+
+AI 返回新数据时，无需刷新页面：
+
+```javascript
+// 增量更新
+app.update(newSpecs);
+
+// 或局部更新
+app.render(partialSpecs);
+```
+
+### 4. AI 适配器
+
+支持主流大模型：
+
+```javascript
+import { createAIGen } from 'ai-render-runtime';
+
+const gen = createAIGen({
+  container: '#app',
+  apiKey: 'your-api-key',
+  provider: 'minimax'  // 或 'openai', 'anthropic'
+});
+
+// 用户交互 → AI 理解意图 → 生成 UI
+await gen.generate('显示本月销售前三的商品');
+```
+
+## 为什么需要 AI Render？
+
+传统方案：
+```
+AI 返回 JSON → 手动写组件 → 绑定数据 → 测试
+```
+
+使用 AI Render：
+```
+AI 返回 JSON → AIRender.render() → 完成
+```
+
+## 技术架构
+
+### 响应式内核
+
+- **Signal** - 细粒度响应式，精准追踪依赖
+- **Proxy 响应式** - Vue 3 风格深层响应
+- **Computed** - 惰性求值缓存
+
+### 高性能渲染
+
+- **O(n) Diff** - key-based 差异算法
+- **PatchFlags** - 精细化 DOM 更新
+- **Fiber 调度** - 可中断渲染，支持优先级
+
+### 现代开发体验
+
+- JSX 支持
+- TypeScript 完整类型
+- SSR/Hydrate 支持
+
+## API 概览
+
+### 核心
+
+```typescript
+// AI 驱动的渲染
+new AIRender({ container, initialSpec })
+air.update(specs)
+
+// 传统渲染
+render(vnode, container)
+
+// JSX
+jsx(type, props)
+```
+
+### 响应式
+
+```typescript
+createSignal(initial)      // 信号
+reactive(obj)              // 响应式对象
+computed(fn)               // 计算属性
+watch(fn, callback)        // 监听
+```
+
+### 组件
+
+```typescript
+memo(Component)            // 记忆化
+useMemo(fn, deps)         // 值记忆化
+useRef(initial?)          // DOM 引用
+```
+
+### 生命周期
+
+```typescript
+onMounted(fn)             // 挂载完成
+onUpdated(fn)             // 更新完成
+onUnmounted(fn)           // 卸载
+```
+
+### 高级
+
+```typescript
+KeepAlive                  // 组件缓存
+Suspense                   // 异步加载
+defineAsyncComponent()     // 异步组件
+ErrorBoundary             // 错误边界
+```
 
 ## 安装
 
@@ -34,207 +216,6 @@
 npm install
 npm run build
 ```
-
-## 快速开始
-
-### 基本使用
-
-```typescript
-import { h, render, createSignal } from 'ai-render-runtime';
-
-function App() {
-  const [count, setCount] = createSignal(0);
-
-  return h('div', { class: 'app' },
-    h('h1', null, 'Hello AI Render'),
-    h('p', null, `Count: ${count()}`),
-    h('button', {
-      onClick: () => setCount(count() + 1)
-    }, 'Increment')
-  );
-}
-
-render(h(App), document.getElementById('root'));
-```
-
-### 使用 JSX
-
-```tsx
-import { jsx, render } from 'ai-render-runtime';
-
-function App() {
-  const [count, setCount] = createSignal(0);
-
-  return (
-    <div class="app">
-      <h1>Hello AI Render</h1>
-      <p>Count: {count()}</p>
-      <button onClick={() => setCount(count() + 1)}>Increment</button>
-    </div>
-  );
-}
-
-render(<App />, document.getElementById('root'));
-```
-
-### 响应式数据
-
-```typescript
-import { reactive, computed, watch } from 'ai-render-runtime';
-
-// Vue 风格的响应式对象
-const state = reactive({
-  name: 'AI Render',
-  version: 1.0
-});
-
-// 计算属性
-const greeting = computed(() => `Hello ${state.name} v${state.version}`);
-
-// 监听变化
-watch(() => state.name, (newName, oldName) => {
-  console.log(`Name changed from ${oldName} to ${newName}`);
-});
-```
-
-### 生命周期钩子
-
-```typescript
-import { onMounted, onUpdated, onUnmounted } from 'ai-render-runtime';
-
-function MyComponent() {
-  onMounted(() => {
-    console.log('Component mounted');
-  });
-
-  onUpdated(() => {
-    console.log('Component updated');
-  });
-
-  onUnmounted(() => {
-    console.log('Component unmounted');
-  });
-
-  return h('div', null, 'Hello');
-}
-```
-
-### 异步组件
-
-```typescript
-import { defineAsyncComponent, Suspense, h } from 'ai-render-runtime';
-
-const AsyncComponent = defineAsyncComponent(() =>
-  import('./HeavyComponent').then(m => ({ default: m.default }))
-);
-
-function App() {
-  return h(Suspense, { fallback: h('div', null, 'Loading...') },
-    h(AsyncComponent)
-  );
-}
-```
-
-### 组件缓存
-
-```typescript
-import { KeepAlive, h } from 'ai-render-runtime';
-
-function App() {
-  return h(KeepAlive, { include: ['dashboard', 'profile'] },
-    h(Router)
-  );
-}
-```
-
-## API 参考
-
-### 核心
-
-| API | 说明 |
-|-----|------|
-| `h(tag, props, ...children)` | 创建虚拟节点 |
-| `render(vnode, container)` | 渲染到 DOM |
-| `jsx(type, props)` | JSX 工厂函数 |
-
-### 响应式
-
-| API | 说明 |
-|-----|------|
-| `createSignal(initial)` | 创建响应式信号 |
-| `reactive(obj)` | 创建响应式对象 |
-| `computed(fn)` | 创建计算属性 |
-| `watch(fn, callback)` | 监听变化 |
-| `batch(fn)` | 批量更新 |
-
-### 组件
-
-| API | 说明 |
-|-----|------|
-| `memo(Component, compare?)` | 记忆化组件 |
-| `useMemo(fn, deps)` | 记忆化计算值 |
-| `useCallback(fn, deps)` | 记忆化回调 |
-| `useRef(initial?)` | 创建 ref |
-| `forwardRef(render)` | 转发 ref |
-
-### 生命周期
-
-| API | 说明 |
-|-----|------|
-| `onMounted(fn)` | 挂载后 |
-| `onUpdated(fn)` | 更新后 |
-| `onUnmounted(fn)` | 卸载后 |
-| `onBeforeMount(fn)` | 挂载前 |
-| `onBeforeUpdate(fn)` | 更新前 |
-| `onBeforeUnmount(fn)` | 卸载前 |
-
-### 上下文
-
-| API | 说明 |
-|-----|------|
-| `createContext(defaultValue)` | 创建上下文 |
-| `useContext(context)` | 使用上下文 |
-| `provide(key, value)` | 提供值 |
-| `inject(key, default?)` | 注入值 |
-
-### 高级
-
-| API | 说明 |
-|-----|------|
-| `KeepAlive` | 组件缓存 |
-| `Suspense` | 异步加载状态 |
-| `defineAsyncComponent(loader)` | 异步组件 |
-| `ErrorBoundary` | 错误边界 |
-| `enableStaticHoisting()` | 启用静态提升 |
-| `scheduleCallback(priority, fn)` | 调度回调 |
-
-## 架构
-
-```
-src/
-├── index.ts          # 主入口
-├── vdom.ts          # 虚拟 DOM
-├── renderer.ts      # 渲染器
-├── signal.ts        # 响应式信号
-├── reactive.ts      # Proxy 响应式
-├── diff.ts          # Diff 算法
-├── scheduler.ts     # 调度器
-├── fiber.ts         # Fiber 架构
-├── memo.ts          # 记忆化
-├── lifecycle.ts     # 生命周期
-├── context.ts       # 上下文
-├── refs.ts          # Refs
-├── keep-alive.ts    # 组件缓存
-├── suspense.ts      # 异步组件
-├── error-boundary.ts # 错误边界
-└── vnode-cache.ts   # VNode 缓存
-```
-
-## 性能
-
-- 虚拟 DOM 创建比 React 快 3-5x
-- 响应式更新比 React 快 2-3x（无虚拟 DOM 重渲染）
-- 更小的 bundle 体积 (~10KB gzipped)
 
 ## 浏览器支持
 
