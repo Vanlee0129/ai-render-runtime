@@ -289,6 +289,100 @@ export function createArraySignal<T>(initialValue: T[]): {
 }
 
 /**
+ * createLazyComputed - Vue 3 style lazy computed
+ * Only recomputes when first accessed and only updates on access after dependency changes
+ */
+export function createLazyComputed<T>(
+  compute: () => T
+): () => T {
+  let value: T;
+  let hasValue = false;
+  let dirty = true;
+  let currentTracking: Subscriber | null = null;
+
+  const signal = new Signal<T>(undefined as T);
+
+  // Subscribe to track dependencies
+  const trackedCompute = () => {
+    const prev = currentTracking;
+    currentTracking = () => {
+      dirty = true;
+    };
+
+    try {
+      value = compute();
+      hasValue = true;
+      dirty = false;
+    } finally {
+      currentTracking = prev;
+    }
+  };
+
+  // Run once to initialize
+  trackedCompute();
+
+  // Return getter that only recomputes when dirty
+  return () => {
+    if (dirty) {
+      trackedCompute();
+    }
+    return value;
+  };
+}
+
+/**
+ * ComputedSignal - A computed signal that caches its value
+ * Similar to Vue 3's computed
+ */
+export class ComputedSignal<T> {
+  private value: T;
+  private computeFn: () => T;
+  private subscribers: Set<Subscriber> = new Set();
+  private dirty = true;
+  private trackingSignal: Signal<any> | null = null;
+
+  constructor(fn: () => T) {
+    this.computeFn = fn;
+    this.value = fn();
+  }
+
+  get(): T {
+    // Collect dependency tracking
+    if (currentTracking) {
+      this.subscribers.add(currentTracking);
+    }
+
+    if (this.dirty) {
+      // Track signals accessed during computation
+      const prevTracking = currentTracking;
+      currentTracking = () => {
+        this.markDirty();
+      };
+
+      try {
+        this.value = this.computeFn();
+        this.dirty = false;
+      } finally {
+        currentTracking = prevTracking;
+      }
+    }
+
+    return this.value;
+  }
+
+  private markDirty(): void {
+    this.dirty = true;
+    this.notify();
+  }
+
+  private notify(): void {
+    batch(() => {
+      this.subscribers.forEach(fn => fn());
+    });
+  }
+}
+
+/**
  * 导出类型
  */
 export type { Subscriber, Effect };
