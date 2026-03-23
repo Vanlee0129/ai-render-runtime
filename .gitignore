@@ -5,6 +5,15 @@ node_modules/
 dist/
 build/
 
+# Claude
+.claude/
+
+# Components
+components/
+
+# Docs
+docs/
+
 # IDE
 .idea/
 .vscode/
