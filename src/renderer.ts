@@ -12,6 +12,7 @@ import { setMemoRenderId, clearMemoCache } from './memo';
 import { setCurrentRenderer } from './context';
 import { setCurrentComponentInstance, callHook } from './lifecycle';
 import { getKeepAliveCache, setKeepAliveCache } from './keep-alive';
+import { isAsyncComponent } from './suspense';
 
 // Event delegation system
 type EventHandler = (e: Event) => void;
@@ -348,18 +349,6 @@ export class Renderer {
     const props = vnode.props || {};
 
     try {
-      // Check if this component should be kept alive
-      const keepAliveKey = (vnode as any)._keepAliveKey;
-      const keepAliveProps = (vnode as any)._keepAliveProps;
-
-      if (keepAliveKey !== undefined) {
-        const cached = getKeepAliveCache(keepAliveKey);
-        if (cached && shouldKeepAlive(keepAliveKey, keepAliveProps || {})) {
-          // Use cached DOM, return it without re-rendering
-          return cached.dom;
-        }
-      }
-
       // Set current component for lifecycle hooks
       setCurrentComponentInstance(Component);
 
@@ -367,6 +356,14 @@ export class Renderer {
       callHook(Component, 'onBeforeMount');
 
       const result = Component(props);
+
+      // Handle promise (async component threw)
+      if (result instanceof Promise) {
+        // This is an async component - we'll render fallback during loading
+        // For now, return a placeholder comment node
+        setCurrentComponentInstance(null);
+        return document.createComment('Async Component Loading');
+      }
 
       setCurrentComponentInstance(null);
 
@@ -380,29 +377,15 @@ export class Renderer {
       // Call onMounted after DOM is created
       callHook(Component, 'onMounted');
 
-      // Transfer event handlers from vnode to actual DOM
-      if (vnode.props && (dom as Element)._eventHandlers) {
-        for (const key in vnode.props) {
-          if (key.startsWith('on') && typeof vnode.props[key] === 'function') {
-            const eventName = key.slice(2).toLowerCase();
-            (dom as Element)._eventHandlers!.set(eventName, vnode.props[key]);
-          }
-        }
-      }
-
-      // Cache if this is a kept-alive component
-      if (keepAliveKey !== undefined) {
-        setKeepAliveCache(keepAliveKey, {
-          key: keepAliveKey,
-          vnode,
-          component: Component,
-          dom
-        });
-      }
-
       return dom;
     } catch (e) {
       setCurrentComponentInstance(null);
+
+      // Check if it's a promise (async component error boundary)
+      if (e instanceof Promise) {
+        return document.createComment('Suspended');
+      }
+
       console.error('Component render error:', e);
       return document.createComment('Error');
     }
