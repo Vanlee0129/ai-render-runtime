@@ -131,6 +131,7 @@ export { scheduleCallback, runWithPriority, getCurrentPriority, Priority, Immedi
 export { memo, useMemo, useCallback, isMemoized } from './memo';
 export { createContext, useContext, pushContext, popContext, Context } from './context';
 export { ErrorBoundary, componentDidCatch, ErrorInfo, ErrorBoundaryState } from './error-boundary';
+export { ref, useRef, forwardRef, Ref, RefCallback } from './refs';
 export type { Component, ComponentProps };
 
 // 便捷函数

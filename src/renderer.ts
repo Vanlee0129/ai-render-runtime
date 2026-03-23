@@ -4,6 +4,7 @@
  */
 
 import { VNode, VNodeFlags, VNodeProps, Component, ComponentProps } from './vdom';
+import { Ref } from './refs';
 import { Signal, batch, createSignal } from './signal';
 import { scheduleCallback, NormalPriority } from './scheduler';
 import { diff, batchDiff, reconcile, Patch, PatchType, diffChildrenKeyed } from './diff';
@@ -256,8 +257,12 @@ export class Renderer {
       }
 
       // ref
-      if (key === 'ref' && typeof value === 'function') {
-        value(dom);
+      if (key === 'ref') {
+        if (typeof value === 'function') {
+          value(dom);
+        } else if (value && 'current' in value) {
+          (value as Ref<any>).current = dom;
+        }
         continue;
       }
 
@@ -355,8 +360,12 @@ export class Renderer {
       }
       
       // ref
-      if (key === 'ref' && typeof newValue === 'function') {
-        newValue(dom);
+      if (key === 'ref') {
+        if (typeof newValue === 'function') {
+          newValue(dom);
+        } else if (newValue && 'current' in newValue) {
+          (newValue as Ref<any>).current = dom;
+        }
         return;
       }
       
