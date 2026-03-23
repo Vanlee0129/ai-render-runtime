@@ -139,6 +139,7 @@ export { ref, useRef, forwardRef, Ref, RefCallback } from './refs';
 export { onMounted, onUpdated, onUnmounted, onBeforeMount, onBeforeUpdate, onBeforeUnmount } from './lifecycle';
 export { KeepAlive, getKeepAliveCache, clearKeepAliveCache } from './keep-alive';
 export { defineAsyncComponent, markAsyncComponent, isAsyncComponent, getSuspenseState } from './suspense';
+export { reactive, ref as reactiveRef, computed, watch, watchEffect, isRef } from './reactive';
 export type { Component, ComponentProps };
 
 // 便捷函数
